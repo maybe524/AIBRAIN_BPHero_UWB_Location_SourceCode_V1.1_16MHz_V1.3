@@ -42,6 +42,7 @@
 #include "stm32f10x.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "deca_sleep.h"
@@ -95,8 +96,27 @@ static uint8 Tag_Statistics_response[] =             {0x41, 0x88, 0, 0x0, 0xDE, 
 static uint8 Master_Release_Semaphore_comfirm[] =    {0x41, 0x88, 0, 0x0, 0xDE, 'W', 'A', 'V', 'E', 0xE4, 0, 0, 0};
 
 
+static unsigned int AIBrain_timestamp = 0;
+static char* AIBrain_get_timestamp(void)
+{
+	static char timestamp_buf[516] = {0};
+	
+	sprintf(timestamp_buf, "%08d", (unsigned int)AIBrain_timestamp++);
+	return timestamp_buf;
+}
 
 
+// 用于调试信息
+#define TAG_DEBUG	"DEBUG"
+#define TAG_MSG2TX2	"M2TX2"
+
+#define AIBrain_Dbug(format, ...)		do { \
+			printf("%s [%s]: "format"\r\n", TAG_DEBUG, AIBrain_get_timestamp(), ##__VA_ARGS__); \
+		} while (0)
+// 用于跟主板通信
+#define AIBrain_Msge(format, ...)		do { \
+			printf("%s [%s]: "format"\r\n", TAG_MSG2TX2, AIBrain_get_timestamp(), ##__VA_ARGS__); \
+		} while (0)
 
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
@@ -536,7 +556,7 @@ int main(void)
     /* Start with board specific hardware init. */
     peripherals_init();
 	
-    printf("hello dwm1000!\r\n");
+    AIBrain_Dbug("hello dwm1000! build time: %s %s", __DATE__, __TIME__);
 
     /* Reset and initialise DW1000.
      * For initialisation, DW1000 clocks must be temporarily set to crystal speed. After initialisation SPI rate can be increased for optimum
@@ -566,7 +586,7 @@ int main(void)
     dwt_settxantennadelay(TX_ANT_DLY);
     OLED_ShowString(0,0,"INIT PASS");
 
-    printf("init pass!\r\n");
+    AIBrain_Dbug("init pass!");
 		
     AnchorList[0].x =0.12;
     AnchorList[0].y =0.34;
@@ -746,6 +766,7 @@ int main(void)
 #endif
 
 #ifdef TAG
+	AIBrain_Dbug("TAG branch!");
     /* Set expected response's delay and timeout. See NOTE 4 and 5 below.
      * As this example only handles one incoming frame with always the same delay and timeout, those values can be set here once for all. */
     dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
@@ -800,6 +821,7 @@ int main(void)
 
         if(TAG_ID == MASTER_TAG)//master  tag
         {
+        	// AIBrain_Dbug("case TAG_ID = MASTER_TAG");
             //statistics tag
             if(Sum_Tag_Semaphore_request() == 0)
             {
@@ -1433,3 +1455,18 @@ PUTCHAR_PROTOTYPE
   * @}
   */
 /******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
+
+// https://blog.csdn.net/SheepTech/article/details/82695424
+static unsigned char tmp = 0;
+void USART1_IRQHandler(void)
+{
+  static unsigned char rxdat;
+  
+  if (USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)
+  {
+    USART_ClearITPendingBit(USART1, USART_IT_RXNE); //Clear flag
+    rxdat = USART_ReceiveData(USART1);
+    tmp = rxdat;
+  }
+}
+

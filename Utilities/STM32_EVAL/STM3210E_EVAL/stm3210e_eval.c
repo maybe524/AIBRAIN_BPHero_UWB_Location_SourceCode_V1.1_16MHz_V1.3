@@ -330,8 +330,9 @@ uint32_t STM_EVAL_PBGetState(Button_TypeDef Button)
   */
 void STM_EVAL_COMInit(COM_TypeDef COM, USART_InitTypeDef* USART_InitStruct)
 {
-  GPIO_InitTypeDef GPIO_InitStructure;
-
+  GPIO_InitTypeDef GPIO_InitStructure;  
+  NVIC_InitTypeDef NVIC_InitStructure;
+  
   /* Enable GPIO clock */
   RCC_APB2PeriphClockCmd(COM_TX_PORT_CLK[COM] | COM_RX_PORT_CLK[COM] | RCC_APB2Periph_AFIO, ENABLE);
 
@@ -354,11 +355,20 @@ void STM_EVAL_COMInit(COM_TypeDef COM, USART_InitTypeDef* USART_InitStruct)
   /* Configure USART Rx as input floating */
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_InitStructure.GPIO_Pin = COM_RX_PIN[COM];
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(COM_RX_PORT[COM], &GPIO_InitStructure);
 
   /* USART configuration */
   USART_Init(COM_USART[COM], USART_InitStruct);
-    
+  
+  //Uart1 NVIC 中断
+  NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 3;
+  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;
+  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE; // IRQ
+  USART_ITConfig(USART1, USART_IT_RXNE, ENABLE); // 数据接收中断使能
+  NVIC_Init(&NVIC_InitStructure);
+
   /* Enable USART */
   USART_Cmd(COM_USART[COM], ENABLE);
 }
