@@ -53,6 +53,9 @@
 #include "kalman.h"
 #include "AT24C02.h"
 #include "stm32_eval.h"
+#include "FreeRTOSConfig.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 /* Example application name and version to display on LCD screen. */
 #define RNG_DELAY_MS 5
@@ -524,7 +527,7 @@ double final_distance =  0;
 /**************************************************************/
 //=============================================================//
 
-int main(void)
+int aibrain_main(void)
 {
     uint8 anthor_index = 0;
     uint8 tag_index = 0;
@@ -1433,3 +1436,52 @@ PUTCHAR_PROTOTYPE
   * @}
   */
 /******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
+
+static void aibrain_task_1( void *pvParameters)
+{
+    while (1) {
+        printf("aibrain_task_1\r\n");
+    }
+}
+
+static void aibrain_task_2( void *pvParameters)
+{
+    while (1) {
+        printf("aibrain_task_2\r\n");
+    }
+}
+
+#define mainQUEUE_POLL_PRIORITY				( tskIDLE_PRIORITY + 2 )
+#define mainCHECK_TASK_PRIORITY				( tskIDLE_PRIORITY + 3 )
+#define mainCREATOR_TASK_PRIORITY           ( tskIDLE_PRIORITY + 3 )
+/* The check task uses the sprintf function so requires a little more stack. */
+#define mainCHECK_TASK_STACK_SIZE			( configMINIMAL_STACK_SIZE + 50 )
+
+static int aibrain_rtos_main(void)
+{
+    /* Start with board specific hardware init. */
+    peripherals_init();
+    printf("hello dwm1000!\r\n");
+    
+   	/* Start the tasks defined within this file/specific to this demo. */
+    xTaskCreate(aibrain_task_1, "aibrain_task_1", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
+	xTaskCreate(aibrain_task_2, "aibrain_task_1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
+
+    /* The suicide tasks must be created last as they need to know how many
+	tasks were running prior to their creation in order to ascertain whether
+	or not the correct/expected number of tasks are running at any given time. */
+    vCreateSuicidalTasks( mainCREATOR_TASK_PRIORITY );
+    
+    /* Start the scheduler. */
+	vTaskStartScheduler();
+    
+    return 0;
+}
+
+int main(void)
+{
+    aibrain_rtos_main();
+    // aibrain_dwm1000_main();
+    
+    return 0;
+}
