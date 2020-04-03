@@ -1,9 +1,0 @@
-.\flash.o: ..\Common\Minimal\flash.c
-.\flash.o: E:\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
-.\flash.o: ..\..\Source\include\FreeRTOS.h
-.\flash.o: E:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-.\flash.o: E:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-.\flash.o: ..\CORTEX_STM32F103_Keil\FreeRTOSConfig.h
-.\flash.o: ..\..\Source\include\projdefs.h
-.\flash.o: ..\..\Source\include\portable.h
-.\flash.o: ..\..\Source\include\deprecated_definitions.h

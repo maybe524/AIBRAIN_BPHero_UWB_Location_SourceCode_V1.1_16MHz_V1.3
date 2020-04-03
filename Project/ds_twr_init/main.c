@@ -1437,17 +1437,23 @@ PUTCHAR_PROTOTYPE
   */
 /******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
 
-static void aibrain_task_1( void *pvParameters)
+static void aibrain_task_1(void *pvParameters)
 {
+    unsigned int task_1_cnt = 0;
+    
     while (1) {
-        printf("aibrain_task_1\r\n");
+        printf("aibrain_task_1: %03d\r\n", task_1_cnt++);
+        vTaskDelay(1000);
     }
 }
 
-static void aibrain_task_2( void *pvParameters)
+static void aibrain_task_2(void *pvParameters)
 {
+    unsigned int task_2_cnt = 0;
+
     while (1) {
-        printf("aibrain_task_2\r\n");
+        printf("aibrain_task_2: %03d\r\n", task_2_cnt++);
+        vTaskDelay(1000);
     }
 }
 
@@ -1462,7 +1468,7 @@ static int aibrain_rtos_main(void)
     /* Start with board specific hardware init. */
     peripherals_init();
     printf("hello dwm1000!\r\n");
-    
+        
    	/* Start the tasks defined within this file/specific to this demo. */
     xTaskCreate(aibrain_task_1, "aibrain_task_1", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
 	xTaskCreate(aibrain_task_2, "aibrain_task_1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
@@ -1470,8 +1476,9 @@ static int aibrain_rtos_main(void)
     /* The suicide tasks must be created last as they need to know how many
 	tasks were running prior to their creation in order to ascertain whether
 	or not the correct/expected number of tasks are running at any given time. */
-    vCreateSuicidalTasks( mainCREATOR_TASK_PRIORITY );
+    // vCreateSuicidalTasks( mainCREATOR_TASK_PRIORITY );
     
+    AIBrainEnvSetInitOK();
     /* Start the scheduler. */
 	vTaskStartScheduler();
     

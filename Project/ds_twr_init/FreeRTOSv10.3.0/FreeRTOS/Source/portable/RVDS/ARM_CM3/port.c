@@ -408,8 +408,26 @@ __asm void xPortPendSVHandler( void )
 }
 /*-----------------------------------------------------------*/
 
+static int aibrain_env_initok = 0;
+// 用于兼容原本SDK
+int AIBrainEnvGetInitOK(void)
+{
+    return aibrain_env_initok;
+}
+
+int AIBrainEnvSetInitOK(void)
+{
+    aibrain_env_initok = 1;
+}
+
 void xPortSysTickHandler( void )
 {
+    // xiaowen.huang@hotmail.com
+    // 临时调用原本SDK的Tick函数，用于记录系统启动的Tick。差值可以计实现sleep函数
+    SysTick_Handler();
+    if (!AIBrainEnvGetInitOK())
+        return;
+        
 	/* The SysTick runs at the lowest interrupt priority, so when this interrupt
 	executes all interrupts must be unmasked.  There is therefore no need to
 	save and then restore the interrupt mask value as its value is already

@@ -1,9 +1,0 @@
-.\blockq.o: ..\Common\Minimal\BlockQ.c
-.\blockq.o: E:\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
-.\blockq.o: ..\..\Source\include\FreeRTOS.h
-.\blockq.o: E:\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
-.\blockq.o: E:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
-.\blockq.o: ..\CORTEX_STM32F103_Keil\FreeRTOSConfig.h
-.\blockq.o: ..\..\Source\include\projdefs.h
-.\blockq.o: ..\..\Source\include\portable.h
-.\blockq.o: ..\..\Source\include\deprecated_definitions.h
