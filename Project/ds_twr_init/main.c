@@ -98,8 +98,28 @@ static uint8 Tag_Statistics_response[] =             {0x41, 0x88, 0, 0x0, 0xDE, 
 static uint8 Master_Release_Semaphore_comfirm[] =    {0x41, 0x88, 0, 0x0, 0xDE, 'W', 'A', 'V', 'E', 0xE4, 0, 0, 0};
 
 
+#define TASK_GEN_STEP_ENTRY(s)   if ((step) == (s))
+#define array_for_each(v, objs)  for ((v) = 0; (v) < (sizeof(objs) / sizeof(objs[0])); (v)++)
+
+static unsigned int AIBrain_get_timestamp(void)
+{	
+    extern volatile unsigned long time32_incr;
+	return time32_incr;
+}
 
 
+#define TAG_DEBUG	"DEBUG"
+#define TAG_MSG2TX2	"M2TX2"
+#define AIBrain_Dbug(format, ...)		do { \
+			printf("%s [%08d]: "format"\r\n", TAG_DEBUG,   AIBrain_get_timestamp(), ##__VA_ARGS__); \
+		} while (0)
+#define AIBrain_Msge(format, ...)		do { \
+			printf("%s [%08d]: "format"\r\n", TAG_MSG2TX2, AIBrain_get_timestamp(), ##__VA_ARGS__); \
+		} while (0)
+
+static int is_at_prepare = 0;
+static char at_buff[256] = {0};
+static int at_buff_index = 0;
 
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
@@ -223,9 +243,9 @@ int Anthordistance_count[ANCHOR_MAX_NUM];
 void dwt_dumpregisters(char *str, size_t strSize)
 {
     uint32 reg = 0;
-    uint8 buff[5];
+    // uint8 buff[5];
     int i;
-    int cnt ;
+    int cnt = 0;
 
 #if (0)
     //first print all single registers
@@ -527,7 +547,7 @@ double final_distance =  0;
 /**************************************************************/
 //=============================================================//
 
-int aibrain_main(void)
+static int aibrain_dwm1000_main(void)
 {
     uint8 anthor_index = 0;
     uint8 tag_index = 0;
@@ -1437,13 +1457,159 @@ PUTCHAR_PROTOTYPE
   */
 /******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/
 
-static void aibrain_task_1(void *pvParameters)
+void USART1_IRQHandler(void)
 {
-    unsigned int task_1_cnt = 0;
+    static unsigned char rxdat;
+  
+    if (USART_GetITStatus(USART1, USART_IT_RXNE) != RESET) {
+        USART_ClearITPendingBit(USART1, USART_IT_RXNE); //Clear flag
+        rxdat = USART_ReceiveData(USART1);
+        if (!is_at_prepare) {
+            at_buff[at_buff_index++] = rxdat;
+            if (at_buff_index >= 2 && at_buff[at_buff_index - 1] == '\n' && at_buff[at_buff_index - 2] == '\r') {
+                is_at_prepare = 1;
+            }
+        }
+    }
+}
+   
+//LED Init Function 
+static void LED_init(void)
+{
+    GPIO_InitTypeDef GPIO_InitStructure; 
     
+	//Initialize System Timer 
+	SystemInit();  
+	//使能PB3和PB4，并关闭PB3和PB4的复用功能，使IO功能生效 
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOB , ENABLE);  
+	GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);  
+	//GPIO Structure 
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11; 
+	//Chose Pin3 and Pin4
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; 
+	//Set Frequency 50MHz 
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; //暂时不懂，只知道好像是推挽式  
+	//GPIO init 
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+    
+    while (1) { //LED3 ON && LED4 OFF 
+		GPIO_SetBits(GPIOB, GPIO_Pin_10); 
+		GPIO_ResetBits(GPIOB, GPIO_Pin_11); 
+		vTaskDelay(1);  
+		//LED3 OFF && LED4 ON 
+		GPIO_ResetBits(GPIOB, GPIO_Pin_10); 
+		GPIO_SetBits(GPIOB, GPIO_Pin_11); 
+		vTaskDelay(1); 
+	}
+}
+
+static void TIM2_PWM_Ch3_init(void)
+{
+    u16 arr = 1999, psc = 6;
+    GPIO_InitTypeDef GPIO_InitStructure;
+    TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
+    TIM_OCInitTypeDef  TIM_OCInitStructure;
+
+    // 关闭JTAG的IO口
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
+    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+    
+    TIM_DeInit(TIM2);
+    // 使能定时器TIM2时钟
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+    // 使能PWM输出GPIO口时钟
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE); 
+    
+    GPIO_PinRemapConfig(GPIO_FullRemap_TIM2, ENABLE);    
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;  // 定时器TIM4的PWM输出通道1，TIM4_CH1
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP; // 复用推挽输出
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOB, &GPIO_InitStructure);  // 初始化GPIO
+        
+    TIM_TimeBaseStructure.TIM_Period = arr; // 自动重装值
+    TIM_TimeBaseStructure.TIM_Prescaler = psc; // 时钟预分频数
+    TIM_TimeBaseStructure.TIM_ClockDivision = 0;
+    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up; // TIM向上计数模式
+    TIM_TimeBaseInit(TIM2, &TIM_TimeBaseStructure); // 初始化TIM4
+
+    // 初始化TIM2_CH3的PWM模式
+    TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
+    TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
+    TIM_OCInitStructure.TIM_Pulse = 0;
+    TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_High;
+    TIM_OC3Init(TIM2, &TIM_OCInitStructure);
+    // 使能通道的预装载寄存器
+    TIM_OC3PreloadConfig(TIM2, TIM_OCPreload_Enable);   // OC3，表示第三通道
+
+    TIM_ARRPreloadConfig(TIM2, ENABLE); // 使能重装寄存器
+    TIM_Cmd(TIM2, ENABLE);  // 使能定时器TIM2，准备工作 
+#if 0
+    TIM_SetCompare3(TIM2, val);
+    val += 10;
+    vTaskDelay(1000);
+#endif
+}
+
+static int aibrain_motor_init(void *argv, char *response)
+{
+    const char *response_ok = "RE+LMINIT=OK";
+
+    TIM2_PWM_Ch3_init();
+    if (response) {
+        strncpy(response, response_ok, strlen(response_ok));
+    }
+    
+    return 0;
+}
+
+struct aibrain_at_map {
+    const char *cmd;
+    int (*hand)(void *argv, char *response);
+};
+
+static struct aibrain_at_map aibrain_at_map_list[] = {
+    {"AT+MINIT", aibrain_motor_init},
+};
+
+static void aibrain_at_response(char *response_str)
+{
+    AIBrain_Msge("%s", response_str);
+}
+
+static void aibrain_task_at_request(void *pvParameters)
+{
+    int step = 0, i = 0, ret = 0;
+    char response_buf[215] = {0};
+
+    AIBrain_Dbug("at_request, listen...");
     while (1) {
-        printf("aibrain_task_1: %03d\r\n", task_1_cnt++);
-        vTaskDelay(1000);
+TASK_GEN_STEP_ENTRY(0) {
+        if (!is_at_prepare) {
+            vTaskDelay(100);
+            continue;
+        }
+        else {
+            AIBrain_Dbug("at_request, get one: %s", at_buff);
+            memset(response_buf, 0, sizeof(response_buf));
+            ret = -1;
+            step++;
+        }
+      }
+
+TASK_GEN_STEP_ENTRY(1) {
+        array_for_each(i, aibrain_at_map_list) {
+            if (!strncmp(aibrain_at_map_list[i].cmd, at_buff, strlen(aibrain_at_map_list[i].cmd))) {
+                ret = aibrain_at_map_list[i].hand(at_buff, response_buf);
+                break;
+            }
+        }
+        AIBrain_Dbug("at_request, end ret: %d", ret);
+        at_buff_index = 0;
+        memset(at_buff, 0, sizeof(at_buff));
+        aibrain_at_response(response_buf);
+        is_at_prepare = 0;
+        step = 0;
+      }
     }
 }
 
@@ -1452,7 +1618,7 @@ static void aibrain_task_2(void *pvParameters)
     unsigned int task_2_cnt = 0;
 
     while (1) {
-        printf("aibrain_task_2: %03d\r\n", task_2_cnt++);
+        AIBrain_Dbug("aibrain_task_2: %03d", task_2_cnt++);
         vTaskDelay(1000);
     }
 }
@@ -1467,10 +1633,10 @@ static int aibrain_rtos_main(void)
 {
     /* Start with board specific hardware init. */
     peripherals_init();
-    printf("hello dwm1000!\r\n");
-        
+    AIBrain_Dbug("hello dwm1000! build time: %s %s", __TIME__, __DATE__);
+    
    	/* Start the tasks defined within this file/specific to this demo. */
-    xTaskCreate(aibrain_task_1, "aibrain_task_1", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
+    xTaskCreate(aibrain_task_at_request, "aibrain_task_at_request", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
 	xTaskCreate(aibrain_task_2, "aibrain_task_1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
 
     /* The suicide tasks must be created last as they need to know how many
@@ -1481,7 +1647,7 @@ static int aibrain_rtos_main(void)
     AIBrainEnvSetInitOK();
     /* Start the scheduler. */
 	vTaskStartScheduler();
-    
+
     return 0;
 }
 

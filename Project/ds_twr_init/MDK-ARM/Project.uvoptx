@@ -1161,10 +1161,6 @@
           <Key>ARMDBGFLAGS</Key>
           <Name></Name>
         </SetRegEntry>
-        <SetRegEntry>
-          <Number>0</Number>
-          <Key>DLGUARM</Key>
-        </SetRegEntry>
       </TargetDriverDllRegistry>
       <Breakpoint/>
       <WatchWindow1>
