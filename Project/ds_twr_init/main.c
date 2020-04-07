@@ -107,6 +107,11 @@ static unsigned int AIBrain_get_timestamp(void)
 	return time32_incr;
 }
 
+struct aibrain_atcmd_map
+{
+    const char *cmd;
+    int (*hand)(void *argv, char *response);
+};
 
 #define TAG_DEBUG	"DEBUG"
 #define TAG_MSG2TX2	"M2TX2"
@@ -1478,31 +1483,32 @@ static void LED_init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure; 
     
-	//Initialize System Timer 
-	SystemInit();  
-	//使能PB3和PB4，并关闭PB3和PB4的复用功能，使IO功能生效 
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOB , ENABLE);  
-	GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);  
-	//GPIO Structure 
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11; 
-	//Chose Pin3 and Pin4
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; 
-	//Set Frequency 50MHz 
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; //暂时不懂，只知道好像是推挽式  
-	//GPIO init 
-	GPIO_Init(GPIOB, &GPIO_InitStructure);
-    
+    //Initialize System Timer 
+    SystemInit();  
+    //使能PB3和PB4，并关闭PB3和PB4的复用功能，使IO功能生效 
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOB , ENABLE);  
+    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);  
+    //GPIO Structure 
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11; 
+    //Chose Pin3 and Pin4
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; 
+    //Set Frequency 50MHz 
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; //暂时不懂，只知道好像是推挽式  
+    //GPIO init 
+    GPIO_Init(GPIOB, &GPIO_InitStructure);
+        
     while (1) { //LED3 ON && LED4 OFF 
-		GPIO_SetBits(GPIOB, GPIO_Pin_10); 
-		GPIO_ResetBits(GPIOB, GPIO_Pin_11); 
-		vTaskDelay(1);  
-		//LED3 OFF && LED4 ON 
-		GPIO_ResetBits(GPIOB, GPIO_Pin_10); 
-		GPIO_SetBits(GPIOB, GPIO_Pin_11); 
-		vTaskDelay(1); 
-	}
+        GPIO_SetBits(GPIOB, GPIO_Pin_10); 
+        GPIO_ResetBits(GPIOB, GPIO_Pin_11); 
+        vTaskDelay(1);  
+        //LED3 OFF && LED4 ON 
+        GPIO_ResetBits(GPIOB, GPIO_Pin_10); 
+        GPIO_SetBits(GPIOB, GPIO_Pin_11); 
+        vTaskDelay(1); 
+    }
 }
 
+static int is_motor_inited = 0;
 static void TIM2_PWM_Ch3_init(void)
 {
     u16 arr = 1999, psc = 6;
@@ -1543,37 +1549,91 @@ static void TIM2_PWM_Ch3_init(void)
 
     TIM_ARRPreloadConfig(TIM2, ENABLE); // 使能重装寄存器
     TIM_Cmd(TIM2, ENABLE);  // 使能定时器TIM2，准备工作 
-#if 0
-    TIM_SetCompare3(TIM2, val);
-    val += 10;
-    vTaskDelay(1000);
-#endif
 }
 
 static int aibrain_motor_init(void *argv, char *response)
 {
-    const char *response_ok = "RE+LMINIT=OK";
+    const char *response_ok = "RE+MINIT=OK";
 
     TIM2_PWM_Ch3_init();
     if (response) {
         strncpy(response, response_ok, strlen(response_ok));
     }
     
+    is_motor_inited = 1;
     return 0;
 }
 
-struct aibrain_at_map {
-    const char *cmd;
-    int (*hand)(void *argv, char *response);
-};
+static int aibrain_motor_set_speed(void *argv, char *response)
+{
+    const char *response_ok = "RE+MSPEED=OK", *response_fail = "RE+MSPEED=FAIL";
+    const char *response_str = NULL;
 
-static struct aibrain_at_map aibrain_at_map_list[] = {
+    if (!is_motor_inited)
+        response_str = response_fail;
+    else {
+        TIM_SetCompare3(TIM2, 10);
+        response_str = response_ok;
+    }
+    if (response) {
+        strncpy(response, response_str, strlen(response_str));
+    }
+    
+    return 0;
+}
+
+// 从“AT+MSPEED=100”中获取“AT+MSPEED”
+static int aibrain_strcpy(char *src, char *dest, char *end_chr)
+{
+    int i, is_match_ch = 0;
+    char *p = src, *q = NULL;
+    
+    if (!src || !dest || !end_chr)
+        return -1;
+    while (*p) {
+        q = end_chr;
+        is_match_ch = 0;
+        while (1) {
+            if (*q == '\0')
+                break;
+            else if (*q == *p) {
+                is_match_ch = 1;
+                break;
+            }
+            q++;
+        }
+        if (is_match_ch)
+            break;
+        *dest++ = *p++;
+    }
+    
+    return (p - src);
+}
+
+static struct aibrain_atcmd_map aibrain_at_map_list[] = 
+{
     {"AT+MINIT", aibrain_motor_init},
+    {"AT+MSPEED", aibrain_motor_set_speed},
 };
 
 static void aibrain_at_response(char *response_str)
 {
-    AIBrain_Msge("%s", response_str);
+    if (response_str && strlen(response_str))
+        AIBrain_Msge("%s", response_str);
+}
+
+static void aibrain_edit_response(char *response_buf, char *response_at)
+{
+    int n = 0;
+    
+    if (!response_buf || !response_at)
+        return;
+    response_buf[0] = 'R';
+    response_buf[1] = 'E';
+    n = aibrain_strcpy(response_buf, &response_at[2], "=");
+    sprintf(&response_buf[n + 2], "=%s", "FAIL");
+    
+    return;
 }
 
 static void aibrain_task_at_request(void *pvParameters)
@@ -1584,19 +1644,18 @@ static void aibrain_task_at_request(void *pvParameters)
     AIBrain_Dbug("at_request, listen...");
     while (1) {
 TASK_GEN_STEP_ENTRY(0) {
-        if (!is_at_prepare) {
+        if (is_at_prepare)
+            step++;
+        else {
             vTaskDelay(100);
             continue;
-        }
-        else {
-            AIBrain_Dbug("at_request, get one: %s", at_buff);
-            memset(response_buf, 0, sizeof(response_buf));
-            ret = -1;
-            step++;
         }
       }
 
 TASK_GEN_STEP_ENTRY(1) {
+        ret = -1;
+        memset(response_buf, 0, sizeof(response_buf));
+        AIBrain_Dbug("at_request, get one: %s", at_buff);
         array_for_each(i, aibrain_at_map_list) {
             if (!strncmp(aibrain_at_map_list[i].cmd, at_buff, strlen(aibrain_at_map_list[i].cmd))) {
                 ret = aibrain_at_map_list[i].hand(at_buff, response_buf);
@@ -1604,6 +1663,8 @@ TASK_GEN_STEP_ENTRY(1) {
             }
         }
         AIBrain_Dbug("at_request, end ret: %d", ret);
+        if (ret == -1)
+            aibrain_edit_response(response_buf, at_buff);
         at_buff_index = 0;
         memset(at_buff, 0, sizeof(at_buff));
         aibrain_at_response(response_buf);
@@ -1637,7 +1698,7 @@ static int aibrain_rtos_main(void)
     
    	/* Start the tasks defined within this file/specific to this demo. */
     xTaskCreate(aibrain_task_at_request, "aibrain_task_at_request", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
-	xTaskCreate(aibrain_task_2, "aibrain_task_1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
+    xTaskCreate(aibrain_task_2, "aibrain_task_1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
 
     /* The suicide tasks must be created last as they need to know how many
 	tasks were running prior to their creation in order to ascertain whether
@@ -1646,7 +1707,7 @@ static int aibrain_rtos_main(void)
     
     AIBrainEnvSetInitOK();
     /* Start the scheduler. */
-	vTaskStartScheduler();
+    vTaskStartScheduler();
 
     return 0;
 }
