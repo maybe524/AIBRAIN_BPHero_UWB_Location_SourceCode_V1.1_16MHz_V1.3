@@ -123,7 +123,7 @@ struct aibrain_atcmd_map
 		} while (0)
 
 static int is_at_prepare = 0;
-static char at_buff[256] = {0};
+static char at_buff[56] = {0};
 static int at_buff_index = 0;
 
 
@@ -391,8 +391,8 @@ void Tag_Measure_Dis(void)
         dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
         /* Write frame data to DW1000 and prepare transmission. See NOTE 7 below. */
         tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
-        tx_poll_msg[ALL_MSG_TAG_IDX] = TAG_ID;//ª˘’æ ’µΩ±Í«©µƒ–≈œ¢£¨¿Ô√Ê”–TAG_ID,‘⁄ª˘’æªÿ∏¥±Í«©µƒ ±∫Ú£¨“≤–Ë“™÷∏∂®TAG_ID,÷ª”–TAG_ID“ª÷¬≤≈◊ˆ¥¶¿Ì
-
+        tx_poll_msg[ALL_MSG_TAG_IDX] = TAG_ID;
+        
         dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);
         dwt_writetxfctrl(sizeof(tx_poll_msg), 0);
 
@@ -402,8 +402,8 @@ void Tag_Measure_Dis(void)
 
         //GPIO_SetBits(GPIOA,GPIO_Pin_2);
         //TODO
-        dwt_rxenable(0);//’‚∏ˆ∫Ûº”µƒ£¨ƒ¨»œtx∫Û”¶∏√◊‘∂Ø«–ªªrx£¨µ´ «ƒø«∞debug ∑¢œ÷≤¢√ª”–◊‘∂Ø¥Úø™£¨’‚¿Ô«ø÷∆¥Úø™rx
-
+        dwt_rxenable(0);
+        
         /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 8 below. */
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR)))
         { };
@@ -421,7 +421,7 @@ void Tag_Measure_Dis(void)
                 dwt_readrxdata(rx_buffer, frame_len, 0);
             }
 
-            if(rx_buffer[ALL_MSG_TAG_IDX] != TAG_ID)//ºÏ≤‚TAG_ID
+            if(rx_buffer[ALL_MSG_TAG_IDX] != TAG_ID)
                 continue;
             rx_buffer[ALL_MSG_TAG_IDX] = 0;
 
@@ -564,7 +564,7 @@ static int aibrain_dwm1000_main(void)
     /* Start with board specific hardware init. */
     peripherals_init();
 	
-    printf("hello dwm1000!\r\n");
+    AIBrain_Dbug("hello dwm1000!");
 
     /* Reset and initialise DW1000.
      * For initialisation, DW1000 clocks must be temporarily set to crystal speed. After initialisation SPI rate can be increased for optimum
@@ -574,7 +574,7 @@ static int aibrain_dwm1000_main(void)
     spi_set_rate_low();
     if(dwt_initialise(DWT_LOADUCODE) == -1)
     {
-        printf("dwm1000 init fail!\r\n");
+        AIBrain_Dbug("dwm1000 init fail!");
         OLED_ShowString(0,0,"INIT FAIL");
         while (1)
         {
@@ -594,7 +594,7 @@ static int aibrain_dwm1000_main(void)
     dwt_settxantennadelay(TX_ANT_DLY);
     OLED_ShowString(0,0,"INIT PASS");
 
-    printf("init pass!\r\n");
+    AIBrain_Dbug("init pass!");
 		
     AnchorList[0].x =0.12;
     AnchorList[0].y =0.34;
@@ -714,18 +714,17 @@ static int aibrain_dwm1000_main(void)
 
                         tof = tof_dtu * DWT_TIME_UNITS;
                         distance = tof * SPEED_OF_LIGHT;
-                        distance = distance - dwt_getrangebias(config.chan,(float)distance, config.prf);//æ‡¿Îºı»•Ω√’˝œµ ˝
+                        distance = distance - dwt_getrangebias(config.chan,(float)distance, config.prf);
                         // sprintf(dist_str, "dis: %3.2f m", distance);
                         //printf("before kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         //kalman filter
                         //distance =  KalMan_Update(&distance);
                         //  sprintf(dist_str, "dis: %3.2f m", distance);
                         //    printf("after kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
-                        //Ω´º∆À„Ω·π˚∑¢ÀÕ∏¯TAG
                         int temp = (int)(distance*100);
                         distance_msg[10] = temp/100;
-                        // a=x;  //◊‘∂Ø¿‡–Õ◊™ªª£¨»°’˚ ˝≤ø∑÷
-                        distance_msg[11] = temp%100;  //≥À100∫Û∂‘100»°”‡£¨µ√µΩ2Œª–° ˝µ„∫Û ˝◊÷
+                        // a=x;  
+                        distance_msg[11] = temp%100;  
                         distance_msg[12] = anthor_index;
 
                         distance_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
@@ -993,7 +992,6 @@ static int aibrain_dwm1000_main(void)
                     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
                 }
             }
-            //ø…ƒ‹¥Ê‘⁄µƒŒ Ã‚£¨TAG ’µΩSemaphore √ª”– Õ∑≈æÕ¿Îø™Õ¯¬Á£¨µº÷¬Master TAGŒﬁ∑® ’ªÿSemaphore£¨’‚∏ˆ–Ë“™∂® ±∆˜ µœ÷£¨∂® ±“ª∂Œ ±º‰£¨»Ù“¿»ª√ª”– ’µΩTAG  Õ∑≈Semaphore£¨–Ë“™«ø÷∆»°œ˚
             //if all tag have serviced by  master tag
             //master tag can measure the distance
             if(Sum_Tag_Semaphore_request() == 0)
@@ -1004,7 +1002,7 @@ static int aibrain_dwm1000_main(void)
         }
         else  //slave tags
         {
-            //SLAVE TAG ∆Ù∂Øƒ¨»œµ»¥˝MASTER TAG∑¢ÀÕÕ≥º∆–≈œ¢“‘º∞ Õ∑≈–≈∫≈¡ø
+            //SLAVE TAG 
             dwt_setrxtimeout(0);
             dwt_rxenable(0);
 
@@ -1185,7 +1183,7 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2,int dista
     }
     cos = (dis1*dis1 + dis3_constans* dis3_constans - dis2*dis2)/(2*dis1*dis3_constans);
     angle  = acos(cos)*180/3.1415926;
-    printf("cos = %f, arccos = %f\r\n",cos,angle);
+    AIBrain_Dbug("cos = %f, arccos = %f",cos,angle);
     sprintf(dist_str, "angle: %3.2f m", angle);
     OLED_ShowString(0, 6,"            ");
     OLED_ShowString(0, 6,dist_str);
@@ -1194,23 +1192,23 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2,int dista
     {
         if(angle > 110)
         {
-            printf("turn right\r\n");
+            AIBrain_Dbug("turn right");
             angle_msg[10] = 'R';
         }
         else if(angle < 75)
         {
-            printf("turn left\r\n");
+            AIBrain_Dbug("turn left");
             angle_msg[10] = 'L';
         }
         else
         {
-            printf("forward\r\n");
+            AIBrain_Dbug("forward");
             angle_msg[10] = 'F';
         }
     }
     else
     {
-        printf("stay here\r\n");
+        AIBrain_Dbug("stay here");
         angle_msg[10] = 'S';
     }
     angle_msg[LOCATION_FLAG_IDX] = 0;
@@ -1470,12 +1468,20 @@ void USART1_IRQHandler(void)
         USART_ClearITPendingBit(USART1, USART_IT_RXNE); //Clear flag
         rxdat = USART_ReceiveData(USART1);
         if (!is_at_prepare) {
-            at_buff[at_buff_index++] = rxdat;
+            if (at_buff_index < sizeof(at_buff))
+                at_buff[at_buff_index++] = rxdat;
             if (at_buff_index >= 2 && at_buff[at_buff_index - 1] == '\n' && at_buff[at_buff_index - 2] == '\r') {
                 is_at_prepare = 1;
             }
         }
     }
+}
+
+static void aibrain_reset_uart_data(void)
+{
+    memset(at_buff, 0, sizeof(at_buff));
+    at_buff_index = 0;
+    is_at_prepare = 0;
 }
    
 //LED Init Function 
@@ -1630,7 +1636,7 @@ static void aibrain_edit_response(char *response_buf, char *response_at)
         return;
     response_buf[0] = 'R';
     response_buf[1] = 'E';
-    n = aibrain_strcpy(response_buf, &response_at[2], "=");
+    n = aibrain_strcpy(&response_at[2], &response_buf[2], "=\r\n");
     sprintf(&response_buf[n + 2], "=%s", "FAIL");
     
     return;
@@ -1641,6 +1647,9 @@ static void aibrain_task_at_request(void *pvParameters)
     int step = 0, i = 0, ret = 0;
     char response_buf[215] = {0};
 
+    // Á≠âÂæÖUARTÁ®≥ÂÆöÔºåÂêØÂä®Êó∂‰ºöÊî∂Âà∞‰π±Á†Å
+    vTaskDelay(5000);
+    aibrain_reset_uart_data();
     AIBrain_Dbug("at_request, listen...");
     while (1) {
 TASK_GEN_STEP_ENTRY(0) {
@@ -1655,7 +1664,7 @@ TASK_GEN_STEP_ENTRY(0) {
 TASK_GEN_STEP_ENTRY(1) {
         ret = -1;
         memset(response_buf, 0, sizeof(response_buf));
-        AIBrain_Dbug("at_request, get one: %s", at_buff);
+    AIBrain_Dbug("at_request, get one, len: %d: %s", strlen(at_buff), at_buff);
         array_for_each(i, aibrain_at_map_list) {
             if (!strncmp(aibrain_at_map_list[i].cmd, at_buff, strlen(aibrain_at_map_list[i].cmd))) {
                 ret = aibrain_at_map_list[i].hand(at_buff, response_buf);
@@ -1665,23 +1674,17 @@ TASK_GEN_STEP_ENTRY(1) {
         AIBrain_Dbug("at_request, end ret: %d", ret);
         if (ret == -1)
             aibrain_edit_response(response_buf, at_buff);
-        at_buff_index = 0;
-        memset(at_buff, 0, sizeof(at_buff));
         aibrain_at_response(response_buf);
-        is_at_prepare = 0;
+        aibrain_reset_uart_data();
         step = 0;
       }
     }
 }
 
-static void aibrain_task_2(void *pvParameters)
+static void aibrain_task_dwm1000(void *pvParameters)
 {
-    unsigned int task_2_cnt = 0;
-
-    while (1) {
-        AIBrain_Dbug("aibrain_task_2: %03d", task_2_cnt++);
-        vTaskDelay(1000);
-    }
+    AIBrain_Dbug("dwm1000 loop...");
+    aibrain_dwm1000_main();
 }
 
 #define mainQUEUE_POLL_PRIORITY				( tskIDLE_PRIORITY + 2 )
@@ -1698,7 +1701,7 @@ static int aibrain_rtos_main(void)
     
    	/* Start the tasks defined within this file/specific to this demo. */
     xTaskCreate(aibrain_task_at_request, "aibrain_task_at_request", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
-    xTaskCreate(aibrain_task_2, "aibrain_task_1", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
+    xTaskCreate(aibrain_task_dwm1000, "aibrain_task_dwm1000", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
 
     /* The suicide tasks must be created last as they need to know how many
 	tasks were running prior to their creation in order to ascertain whether
@@ -1715,7 +1718,6 @@ static int aibrain_rtos_main(void)
 int main(void)
 {
     aibrain_rtos_main();
-    // aibrain_dwm1000_main();
     
     return 0;
 }
