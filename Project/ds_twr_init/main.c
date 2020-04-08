@@ -1492,33 +1492,44 @@ static void aibrain_reset_uart_data(void)
 }
    
 //LED Init Function 
-static void LED_init(void)
+static void aibrain_motor_dir_init(void)
 {
     GPIO_InitTypeDef GPIO_InitStructure; 
     
-    //Initialize System Timer 
-    SystemInit();  
-    //使能PB3和PB4，并关闭PB3和PB4的复用功能，使IO功能生效 
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOB , ENABLE);  
-    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);  
     //GPIO Structure 
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11; 
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11; 
     //Chose Pin3 and Pin4
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz; 
     //Set Frequency 50MHz 
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; //暂时不懂，只知道好像是推挽式  
     //GPIO init 
-    GPIO_Init(GPIOB, &GPIO_InitStructure);
-        
-    while (1) { //LED3 ON && LED4 OFF 
-        GPIO_SetBits(GPIOB, GPIO_Pin_10); 
-        GPIO_ResetBits(GPIOB, GPIO_Pin_11); 
-        vTaskDelay(1);  
-        //LED3 OFF && LED4 ON 
-        GPIO_ResetBits(GPIOB, GPIO_Pin_10); 
-        GPIO_SetBits(GPIOB, GPIO_Pin_11); 
-        vTaskDelay(1); 
+    GPIO_Init(GPIOB, &GPIO_InitStructure); 
+}
+
+static int aibrain_motor_set_dir(void *argv, char *response)
+{
+    int n, v;
+    const char *response_ok = "RE+MDIR=OK", *response_fail = "RE+MDIR=FAIL";
+    const char *response_str = NULL;
+    char buff[10] = {0};
+
+    if (!is_motor_inited) {
+        response_str = response_fail;
+        goto end;
     }
+    response_str = response_ok;
+    n = aibrain_strcpy((char *)argv, buff, "=", "\r\n");
+    v = atoi(buff);
+    if (v)
+        GPIO_SetBits(GPIOB, GPIO_Pin_11);
+    else
+        GPIO_ResetBits(GPIOB, GPIO_Pin_11);
+end:
+    if (response) {
+        strncpy(response, response_str, strlen(response_str));
+    }
+
+    return 0;
 }
 
 static void TIM2_PWM_Ch3_init(void)
@@ -1563,11 +1574,17 @@ static void TIM2_PWM_Ch3_init(void)
     TIM_Cmd(TIM2, ENABLE);  // 使能定时器TIM2，准备工作 
 }
 
+static void aibrain_motor_pwm_init(void)
+{
+    TIM2_PWM_Ch3_init();
+}
+
 static int aibrain_motor_init(void *argv, char *response)
 {
     const char *response_ok = "RE+MINIT=OK";
 
-    TIM2_PWM_Ch3_init();
+    aibrain_motor_pwm_init();
+    aibrain_motor_dir_init();
     if (response) {
         strncpy(response, response_ok, strlen(response_ok));
     }
@@ -1576,21 +1593,24 @@ static int aibrain_motor_init(void *argv, char *response)
     return 0;
 }
 
-static int aibrain_motor_set_speed(void *argv, char *response)
+// PWM调节比例是20:1，即传入的值每增加20个单位，PWM增加1%
+static int aibrain_motor_set_pwm(void *argv, char *response)
 {
     int n, v = 0;
-    const char *response_ok = "RE+MSPEED=OK", *response_fail = "RE+MSPEED=FAIL";
+    const char *response_ok = "RE+MPWM=OK", *response_fail = "RE+MPWM=FAIL";
     const char *response_str = NULL;
     char buff[10] = {0};
 
-    if (!is_motor_inited)
+    if (!is_motor_inited) {
         response_str = response_fail;
-    else {
-        n = aibrain_strcpy((char *)argv, buff, "=", "\r\n");
-        v = atoi(buff);
-        TIM_SetCompare3(TIM2, v);
-        response_str = response_ok;
+        goto end;
     }
+    n = aibrain_strcpy((char *)argv, buff, "=", "\r\n");
+    v = atoi(buff);
+    aibrain_dbug("pwm, get val: %d", v);
+    TIM_SetCompare3(TIM2, v);
+    response_str = response_ok;
+end:
     if (response) {
         strncpy(response, response_str, strlen(response_str));
     }
@@ -1651,7 +1671,8 @@ static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr)
 static struct aibrain_atcmd_map aibrain_at_map_list[] = 
 {
     {"AT+MINIT", aibrain_motor_init},
-    {"AT+MSPEED", aibrain_motor_set_speed},
+    {"AT+MPWM", aibrain_motor_set_pwm},
+    {"AT+MDIR", aibrain_motor_set_dir},
 };
 
 static void aibrain_at_response(char *response_str)
