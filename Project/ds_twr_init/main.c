@@ -100,6 +100,11 @@ static uint8 Master_Release_Semaphore_comfirm[] =    {0x41, 0x88, 0, 0x0, 0xDE, 
 
 #define TASK_GEN_STEP_ENTRY(s)   if ((step) == (s))
 #define array_for_each(v, objs)  for ((v) = 0; (v) < (sizeof(objs) / sizeof(objs[0])); (v)++)
+#define mainQUEUE_POLL_PRIORITY				( tskIDLE_PRIORITY + 2 )
+#define mainCHECK_TASK_PRIORITY				( tskIDLE_PRIORITY + 3 )
+#define mainCREATOR_TASK_PRIORITY           ( tskIDLE_PRIORITY + 3 )
+/* The check task uses the sprintf function so requires a little more stack. */
+#define mainCHECK_TASK_STACK_SIZE			( configMINIMAL_STACK_SIZE + 50 )
 
 static unsigned int AIBrain_get_timestamp(void)
 {	
@@ -115,10 +120,10 @@ struct aibrain_atcmd_map
 
 #define TAG_DEBUG	"DEBUG"
 #define TAG_MSG2TX2	"M2TX2"
-#define AIBrain_Dbug(format, ...)		do { \
+#define aibrain_dbug(format, ...)		do { \
 			printf("%s [%08d]: "format"\r\n", TAG_DEBUG,   AIBrain_get_timestamp(), ##__VA_ARGS__); \
 		} while (0)
-#define AIBrain_Msge(format, ...)		do { \
+#define aibrain_msge(format, ...)		do { \
 			printf("%s [%08d]: "format"\r\n", TAG_MSG2TX2, AIBrain_get_timestamp(), ##__VA_ARGS__); \
 		} while (0)
 extern void AIBrainEnvSetInitOK(void);
@@ -127,7 +132,7 @@ static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr)
 static int is_at_prepare = 0;
 static char at_buff[56] = {0};
 static int at_buff_index = 0;
-
+static int is_motor_inited = 0;
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define ALL_MSG_COMMON_LEN 10
@@ -566,7 +571,7 @@ static int aibrain_dwm1000_main(void)
     /* Start with board specific hardware init. */
     peripherals_init();
 	
-    AIBrain_Dbug("hello dwm1000!");
+    aibrain_dbug("hello dwm1000!");
 
     /* Reset and initialise DW1000.
      * For initialisation, DW1000 clocks must be temporarily set to crystal speed. After initialisation SPI rate can be increased for optimum
@@ -576,7 +581,7 @@ static int aibrain_dwm1000_main(void)
     spi_set_rate_low();
     if(dwt_initialise(DWT_LOADUCODE) == -1)
     {
-        AIBrain_Dbug("dwm1000 init fail!");
+        aibrain_dbug("dwm1000 init fail!");
         OLED_ShowString(0,0,"INIT FAIL");
         while (1)
         {
@@ -596,7 +601,7 @@ static int aibrain_dwm1000_main(void)
     dwt_settxantennadelay(TX_ANT_DLY);
     OLED_ShowString(0,0,"INIT PASS");
 
-    AIBrain_Dbug("init pass!");
+    aibrain_dbug("init pass!");
 		
     AnchorList[0].x =0.12;
     AnchorList[0].y =0.34;
@@ -1185,7 +1190,7 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2,int dista
     }
     cos = (dis1*dis1 + dis3_constans* dis3_constans - dis2*dis2)/(2*dis1*dis3_constans);
     angle  = acos(cos)*180/3.1415926;
-    AIBrain_Dbug("cos = %f, arccos = %f",cos,angle);
+    aibrain_dbug("cos = %f, arccos = %f",cos,angle);
     sprintf(dist_str, "angle: %3.2f m", angle);
     OLED_ShowString(0, 6, (uint8_t *)"            ");
     OLED_ShowString(0, 6, (uint8_t *)dist_str);
@@ -1194,23 +1199,23 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2,int dista
     {
         if(angle > 110)
         {
-            AIBrain_Dbug("turn right");
+            aibrain_dbug("turn right");
             angle_msg[10] = 'R';
         }
         else if(angle < 75)
         {
-            AIBrain_Dbug("turn left");
+            aibrain_dbug("turn left");
             angle_msg[10] = 'L';
         }
         else
         {
-            AIBrain_Dbug("forward");
+            aibrain_dbug("forward");
             angle_msg[10] = 'F';
         }
     }
     else
     {
-        AIBrain_Dbug("stay here");
+        aibrain_dbug("stay here");
         angle_msg[10] = 'S';
     }
     angle_msg[LOCATION_FLAG_IDX] = 0;
@@ -1516,7 +1521,6 @@ static void LED_init(void)
     }
 }
 
-static int is_motor_inited = 0;
 static void TIM2_PWM_Ch3_init(void)
 {
     u16 arr = 1999, psc = 6;
@@ -1653,7 +1657,7 @@ static struct aibrain_atcmd_map aibrain_at_map_list[] =
 static void aibrain_at_response(char *response_str)
 {
     if (response_str && strlen(response_str))
-        AIBrain_Msge("%s", response_str);
+        aibrain_msge("%s", response_str);
 }
 
 static void aibrain_edit_response(char *response_buf, char *response_at)
@@ -1678,7 +1682,7 @@ static void aibrain_task_at_request(void *pvParameters)
     // 等待UART稳定，启动时会收到乱码
     vTaskDelay(5000);
     aibrain_reset_uart_data();
-    AIBrain_Dbug("at_request, listen...");
+    aibrain_dbug("at_request, listen...");
     while (1) {
 TASK_GEN_STEP_ENTRY(0) {
         if (is_at_prepare)
@@ -1692,14 +1696,14 @@ TASK_GEN_STEP_ENTRY(0) {
 TASK_GEN_STEP_ENTRY(1) {
         ret = -1;
         memset(response_buf, 0, sizeof(response_buf));
-        AIBrain_Dbug("at_request, get one, len: %d: %s", strlen(at_buff), at_buff);
+        aibrain_dbug("at_request, get one, len: %d: %s", strlen(at_buff), at_buff);
         array_for_each(i, aibrain_at_map_list) {
             if (!strncmp(aibrain_at_map_list[i].cmd, at_buff, strlen(aibrain_at_map_list[i].cmd))) {
                 ret = aibrain_at_map_list[i].hand(at_buff, response_buf);
                 break;
             }
         }
-        AIBrain_Dbug("at_request, end ret: %d", ret);
+        aibrain_dbug("at_request, end ret: %d", ret);
         if (ret == -1)
             aibrain_edit_response(response_buf, at_buff);
         aibrain_at_response(response_buf);
@@ -1711,21 +1715,15 @@ TASK_GEN_STEP_ENTRY(1) {
 
 static void aibrain_task_dwm1000(void *pvParameters)
 {
-    AIBrain_Dbug("dwm1000 loop...");
+    aibrain_dbug("dwm1000 loop...");
     aibrain_dwm1000_main();
 }
-
-#define mainQUEUE_POLL_PRIORITY				( tskIDLE_PRIORITY + 2 )
-#define mainCHECK_TASK_PRIORITY				( tskIDLE_PRIORITY + 3 )
-#define mainCREATOR_TASK_PRIORITY           ( tskIDLE_PRIORITY + 3 )
-/* The check task uses the sprintf function so requires a little more stack. */
-#define mainCHECK_TASK_STACK_SIZE			( configMINIMAL_STACK_SIZE + 50 )
 
 static int aibrain_rtos_main(void)
 {
     /* Start with board specific hardware init. */
     peripherals_init();
-    AIBrain_Dbug("hello dwm1000! build time: %s %s", __TIME__, __DATE__);
+    aibrain_dbug("hello dwm1000! build time: %s %s", __TIME__, __DATE__);
     
    	/* Start the tasks defined within this file/specific to this demo. */
     xTaskCreate(aibrain_task_at_request, "aibrain_task_at_request", mainCHECK_TASK_STACK_SIZE, NULL, mainCHECK_TASK_PRIORITY, NULL );
