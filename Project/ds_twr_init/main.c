@@ -121,7 +121,9 @@ struct aibrain_atcmd_map
 #define AIBrain_Msge(format, ...)		do { \
 			printf("%s [%08d]: "format"\r\n", TAG_MSG2TX2, AIBrain_get_timestamp(), ##__VA_ARGS__); \
 		} while (0)
-
+extern void AIBrainEnvSetInitOK(void);
+static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr);
+        
 static int is_at_prepare = 0;
 static char at_buff[56] = {0};
 static int at_buff_index = 0;
@@ -1132,24 +1134,24 @@ static void distance_mange(void)
     if(Anthordistance_count[0]>0)
     {
         sprintf(dist_str, "an0:%3.2fm", (float)Anthordistance[0]/1000);
-        OLED_ShowString(0, 2," 		   ");
-        OLED_ShowString(0, 2,dist_str);
+        OLED_ShowString(0, 2, (uint8_t *)" 		   ");
+        OLED_ShowString(0, 2, (uint8_t *)dist_str);
     }
 
 
     if(Anthordistance_count[1]>0)
     {
         sprintf(dist_str, "an1:%3.2fm", (float)Anthordistance[1]/1000);
-        OLED_ShowString(0, 4,"		 ");
-        OLED_ShowString(0, 4,dist_str);
+        OLED_ShowString(0, 4, (uint8_t *)"		 ");
+        OLED_ShowString(0, 4, (uint8_t *)dist_str);
     }
 
 
     if(Anthordistance_count[2]>0)
     {
         sprintf(dist_str, "an2:%3.2fm", (float)Anthordistance[2]/1000);
-        OLED_ShowString(0, 6,"		 ");
-        OLED_ShowString(0, 6,dist_str);
+        OLED_ShowString(0, 6, (uint8_t *)"		 ");
+        OLED_ShowString(0, 6, (uint8_t *)dist_str);
     }
     // printf("Distance:%d,   %d,    %d mm\r\n",(int)((float)Anthordistance[0]/Anthordistance_count[0]),(int)((float)Anthordistance[1]/Anthordistance_count[1]),(int)((float)Anthordistance[2]/Anthordistance_count[2]));
 }
@@ -1185,8 +1187,8 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2,int dista
     angle  = acos(cos)*180/3.1415926;
     AIBrain_Dbug("cos = %f, arccos = %f",cos,angle);
     sprintf(dist_str, "angle: %3.2f m", angle);
-    OLED_ShowString(0, 6,"            ");
-    OLED_ShowString(0, 6,dist_str);
+    OLED_ShowString(0, 6, (uint8_t *)"            ");
+    OLED_ShowString(0, 6, (uint8_t *)dist_str);
 
     if(dis1 > 1)
     {
@@ -1572,13 +1574,17 @@ static int aibrain_motor_init(void *argv, char *response)
 
 static int aibrain_motor_set_speed(void *argv, char *response)
 {
+    int n, v = 0;
     const char *response_ok = "RE+MSPEED=OK", *response_fail = "RE+MSPEED=FAIL";
     const char *response_str = NULL;
+    char buff[10] = {0};
 
     if (!is_motor_inited)
         response_str = response_fail;
     else {
-        TIM_SetCompare3(TIM2, 10);
+        n = aibrain_strcpy((char *)argv, buff, "=", "\r\n");
+        v = atoi(buff);
+        TIM_SetCompare3(TIM2, v);
         response_str = response_ok;
     }
     if (response) {
@@ -1588,21 +1594,42 @@ static int aibrain_motor_set_speed(void *argv, char *response)
     return 0;
 }
 
-// 从“AT+MSPEED=100”中获取“AT+MSPEED”
-static int aibrain_strcpy(char *src, char *dest, char *end_chr)
+/*!
+ * @fn aibrain_strcpy()
+ * @brief 拷贝字符串，从start_chr字符串里边的字符起始，直到遇见end_chr字符串里边的字符
+ * @param src 原始字符串
+ *        dest 需要保存的字符串
+ *        start_chr 起始字符串，注意是字符串，比方说只要匹配里边的某个字符
+ *        end_chr 结束字符串，注意是字符串，只要匹配里边的某个字符
+ * @return 返回的拷贝字节数
+ */
+static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr)
 {
-    int i, is_match_ch = 0;
-    char *p = src, *q = NULL;
+    int i, n = 0;
+    int is_match_ch = 0, is_found_start_ch = 0;
+    char *p = src, *q = NULL, *s = start_chr;
     
     if (!src || !dest || !end_chr)
         return -1;
     while (*p) {
+        // 查找开始的字符
+        if (start_chr && !is_found_start_ch) {
+            s = start_chr;
+            while (*s) {
+                if (*p == *s) {
+                    is_found_start_ch = 1;
+                    break;
+                }
+                s++;
+            }
+            p++;
+            continue;
+        }
         q = end_chr;
         is_match_ch = 0;
-        while (1) {
-            if (*q == '\0')
-                break;
-            else if (*q == *p) {
+        // 拷贝字符，直到遇见结束字符
+        while (*q) {
+            if (*q == *p) {
                 is_match_ch = 1;
                 break;
             }
@@ -1611,9 +1638,10 @@ static int aibrain_strcpy(char *src, char *dest, char *end_chr)
         if (is_match_ch)
             break;
         *dest++ = *p++;
+        n++;
     }
     
-    return (p - src);
+    return n;
 }
 
 static struct aibrain_atcmd_map aibrain_at_map_list[] = 
@@ -1636,7 +1664,7 @@ static void aibrain_edit_response(char *response_buf, char *response_at)
         return;
     response_buf[0] = 'R';
     response_buf[1] = 'E';
-    n = aibrain_strcpy(&response_at[2], &response_buf[2], "=\r\n");
+    n = aibrain_strcpy(&response_at[2], &response_buf[2], "", "=\r\n");
     sprintf(&response_buf[n + 2], "=%s", "FAIL");
     
     return;
@@ -1664,7 +1692,7 @@ TASK_GEN_STEP_ENTRY(0) {
 TASK_GEN_STEP_ENTRY(1) {
         ret = -1;
         memset(response_buf, 0, sizeof(response_buf));
-    AIBrain_Dbug("at_request, get one, len: %d: %s", strlen(at_buff), at_buff);
+        AIBrain_Dbug("at_request, get one, len: %d: %s", strlen(at_buff), at_buff);
         array_for_each(i, aibrain_at_map_list) {
             if (!strncmp(aibrain_at_map_list[i].cmd, at_buff, strlen(aibrain_at_map_list[i].cmd))) {
                 ret = aibrain_at_map_list[i].hand(at_buff, response_buf);

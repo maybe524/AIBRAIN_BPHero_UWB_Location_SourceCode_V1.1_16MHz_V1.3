@@ -1047,7 +1047,7 @@ int dwt_readfromdevice
  */
 uint32 dwt_read32bitoffsetreg(int regFileID,int regOffset)
 {
-    uint32  regval = DWT_ERROR ;
+    uint32  regval = (uint32)DWT_ERROR ;
     int     j ;
     uint8   buffer[4] ;
 
@@ -1079,7 +1079,7 @@ uint32 dwt_read32bitoffsetreg(int regFileID,int regOffset)
  */
 uint16 dwt_read16bitoffsetreg(int regFileID,int regOffset)
 {
-    uint16  regval = DWT_ERROR ;
+    uint16  regval = (uint16)DWT_ERROR ;
     uint8   buffer[2] ;
 
     int result = dwt_readfromdevice(regFileID,regOffset,2,buffer); // Read 2 bytes (16-bits) register into buffer
@@ -1393,7 +1393,7 @@ uint32 _dwt_otpsetmrregs(int mode)
         break;
     default :
     //  printf("OTP SET MR: ERROR : Invalid mode selected\n",mode);
-        return DWT_ERROR;
+        return (uint32)DWT_ERROR;
     }
 
     wr_buf[0] = mra & 0x00ff;
@@ -1527,7 +1527,7 @@ uint32 _dwt_otpprogword32(uint32 data, uint16 address)
     if((rd_buf[0] & 0x02) != 0x02)
     {
 //        printf("OTP PROG 32: ERROR VPP NOT OK, programming will fail. Are MR/MRA/MRB set?\n");
-        return DWT_ERROR;
+        return (uint32)DWT_ERROR;
     }
 
     // Write the data

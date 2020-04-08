@@ -415,7 +415,7 @@ int AIBrainEnvGetInitOK(void)
     return aibrain_env_initok;
 }
 
-int AIBrainEnvSetInitOK(void)
+void AIBrainEnvSetInitOK(void)
 {
     aibrain_env_initok = 1;
 }
@@ -423,7 +423,8 @@ int AIBrainEnvSetInitOK(void)
 void xPortSysTickHandler( void )
 {
     // xiaowen.huang@hotmail.com
-    // 临时调用原本SDK的Tick函数，用于记录系统启动的Tick。差值可以计实现sleep函数
+    // 鍏煎鏃х殑SDK
+    extern void SysTick_Handler(void);
     SysTick_Handler();
     if (!AIBrainEnvGetInitOK())
         return;

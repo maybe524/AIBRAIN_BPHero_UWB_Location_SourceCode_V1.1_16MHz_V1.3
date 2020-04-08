@@ -261,7 +261,7 @@ ITStatus EXTI_GetITEnStatus(uint32_t EXTI_Line)
 //                      RCC_APB2Periph_GPIOE | RCC_APB2Periph_AFIO,
 //                      ENABLE);
 
-//  return 0;
+  return 0;
  }
  
  
@@ -849,6 +849,8 @@ void usartinit(void)
 void USART_puts(uint8_t *s,uint8_t len)
 {
     int i;
+    
+    extern int putchar(int __c);
     for(i=0; i<len; i++)
     {
         putchar(s[i]);
