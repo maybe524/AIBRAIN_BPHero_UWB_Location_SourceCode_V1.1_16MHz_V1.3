@@ -48,6 +48,9 @@ Heap_Size       EQU     0x00000200
 __heap_base
 Heap_Mem        SPACE   Heap_Size
 __heap_limit
+; SVC（系统服务调用）用于任务启动，有些操作系统不允许应用程序直接访问硬件，而是通过提供一些系统服务函数，通过SVC来调用；
+; PendSV（可挂起系统调用）用于完成任务切换，它的最大特性是如果当前有优先级比它高的中断在运行，PendSV会推迟执行，直到高优先级中断执行完毕；
+; SysTick用于产生系统节拍时钟，提供一个时间片，如果多个任务共享同一个优先级，则每次SysTick中断，下一个任务将获得一个时间片
                 IMPORT  xPortSysTickHandler
                 IMPORT  xPortPendSVHandler
                 IMPORT  vPortSVCHandler

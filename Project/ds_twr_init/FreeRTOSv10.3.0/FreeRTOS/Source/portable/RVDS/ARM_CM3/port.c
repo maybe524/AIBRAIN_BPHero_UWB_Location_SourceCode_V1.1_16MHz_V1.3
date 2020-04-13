@@ -226,18 +226,22 @@ __asm void prvStartFirstTask( void )
 {
 	PRESERVE8
 
+    /* Cortext-M3硬件中,0xE000ED08地址处为VTOR(向量表偏移量)寄存器,存储向量表起始地址*/
 	/* Use the NVIC offset register to locate the stack. */
 	ldr r0, =0xE000ED08
 	ldr r0, [r0]
-	ldr r0, [r0]
+	ldr r0, [r0]    /* 取出向量表中的第一项,向量表第一项存储主堆栈指针MSP的初始值*/
 
+    /* 将堆栈地址存入主堆栈指针 */
 	/* Set the msp back to the start of the stack. */
 	msr msp, r0
+    /* 使能全局中断*/
 	/* Globally enable interrupts. */
 	cpsie i
 	cpsie f
 	dsb
 	isb
+    /* 调用SVC启动第一个任务 */
 	/* Call SVC to start the first task. */
 	svc 0
 	nop
@@ -434,13 +438,16 @@ void xPortSysTickHandler( void )
 	save and then restore the interrupt mask value as its value is already
 	known - therefore the slightly faster vPortRaiseBASEPRI() function is used
 	in place of portSET_INTERRUPT_MASK_FROM_ISR(). */
+    /* 设置中断掩码 */
 	vPortRaiseBASEPRI();
 	{
 		/* Increment the RTOS tick. */
+        /* 增加tick计数器值，并检查是否有任务解除阻塞 */
 		if( xTaskIncrementTick() != pdFALSE )
 		{
 			/* A context switch is required.  Context switching is performed in
 			the PendSV interrupt.  Pend the PendSV interrupt. */
+            /* 需要任务切换。产生PendSV中断 */
 			portNVIC_INT_CTRL_REG = portNVIC_PENDSVSET_BIT;
 		}
 	}
