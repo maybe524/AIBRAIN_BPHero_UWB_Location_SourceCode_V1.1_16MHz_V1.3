@@ -75,6 +75,7 @@ typedef enum
 #define SPIx_MOSI					GPIO_Pin_7
 
 #ifdef STM32F10X_HD
+#error
 	#define DW1000_RSTn					GPIO_Pin_0
 	#define DW1000_RSTn_GPIO			GPIOA
 #else

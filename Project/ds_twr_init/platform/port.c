@@ -581,8 +581,9 @@ void reset_DW1000(void)
     GPIO_Init(DW1000_RSTn_GPIO, &GPIO_InitStructure);
 
     //drive the RSTn pin low
-    GPIO_ResetBits(DW1000_RSTn_GPIO, DW1000_RSTn);
-
+    // GPIO_ResetBits(DW1000_RSTn_GPIO, DW1000_RSTn);
+    GPIO_SetBits(DW1000_RSTn_GPIO, DW1000_RSTn);    // 官方：修复即使软硬复位获取不到ID号问题
+    
     //put the pin back to tri-state ... as input
     GPIO_InitStructure.GPIO_Pin = DW1000_RSTn;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;

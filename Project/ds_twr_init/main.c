@@ -57,6 +57,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+//#define ANTHOR
+
 /* Example application name and version to display on LCD screen. */
 #define RNG_DELAY_MS 5
 
@@ -107,7 +109,7 @@ static uint8 Master_Release_Semaphore_comfirm[] =    {0x41, 0x88, 0, 0x0, 0xDE, 
 /* The check task uses the sprintf function so requires a little more stack. */
 #define mainCHECK_TASK_STACK_SIZE			( configMINIMAL_STACK_SIZE + 50 )
 
-static unsigned int AIBrain_get_timestamp(void)
+static unsigned int aibrain_get_timestamp(void)
 {	
     extern volatile unsigned long time32_incr;
 	return time32_incr;
@@ -122,18 +124,20 @@ struct aibrain_atcmd_map
 #define TAG_DEBUG	"DEBUG"
 #define TAG_MSG2TX2	"M2TX2"
 #define aibrain_dbug(format, ...)		do { \
-			printf("%s [%08d]: "format"\r\n", TAG_DEBUG,   AIBrain_get_timestamp(), ##__VA_ARGS__); \
+            if (!is_open_debug)              \
+                break;                       \
+			printf("%s [%08d]: "format"\r\n", TAG_DEBUG,   aibrain_get_timestamp(), ##__VA_ARGS__); \
 		} while (0)
 #define aibrain_msge(format, ...)		do { \
-			printf("%s [%08d]: "format"\r\n", TAG_MSG2TX2, AIBrain_get_timestamp(), ##__VA_ARGS__); \
+			printf("%s [%08d]: "format"\r\n", TAG_MSG2TX2, aibrain_get_timestamp(), ##__VA_ARGS__); \
 		} while (0)
 extern void AIBrainEnvSetInitOK(void);
 static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr);
         
 static int is_at_prepare = 0;
-static char at_buff[40] = {0};
+static char at_buff[64] = {0};
 static int at_buff_index = 0;
-static int is_motor_inited = 0;
+static char is_motor_inited = 0, is_open_debug = 1;
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define ALL_MSG_COMMON_LEN 10
@@ -220,15 +224,17 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2, int dist
 static void distance_mange(void);
 void USART_puts(uint8_t *s,uint8_t len);
 
-#define ANTHOR
+// 默认是TAG的代码
+// #define ANTHOR
 #define TAG_ID 0x0F
 #define MASTER_TAG 0x0F
 #define MAX_SLAVE_TAG 0x02
 #define SLAVE_TAG_START_INDEX 0x01
 
-//#define ANTHOR
+// #define ANTHOR
 #define ANCHOR_MAX_NUM 3
-#define ANCHOR_IND 1  // 0 1 2
+// 给基站设定一个标识号
+#define ANCHOR_IND 0  // 0 1 2
 //#define ANCHOR_IND ANCHOR_NUM
 
 uint8 Semaphore[MAX_SLAVE_TAG];
@@ -294,67 +300,59 @@ void dwt_dumpregisters(char *str, size_t strSize)
     }
 #else
     //reg 0x24
-    for(i=0; i<=12; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x24,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x24,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i <= 12; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x24, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x24, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x27
-    for(i=0; i<=44; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x27,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x27,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i <= 44; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x27, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x27, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x28
-    for(i=0; i<=64; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x28,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x28,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i <= 64; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x28, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x28, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x2A
-    for(i=0; i<20; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x2A,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x2A,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i < 20; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x2A, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x2A, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x2B
-    for(i=0; i<24; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x2B,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x2B,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i < 24; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x2B, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x2B, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x2f
-    for(i=0; i<40; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x2f,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x2f,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i < 40; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x2f, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x2f, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x31
-    for(i=0; i<84; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x31,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x31,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i < 84; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x31, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x31, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 
     //reg 0x36 = PMSC_ID
-    for(i=0; i<=48; i+=4)
-    {
-        reg = dwt_read32bitoffsetreg(0x36,i) ;
-        str += cnt = sprintf(str,"reg[%02X:%02X]=%08X",0x36,i,reg) ;
-        str += cnt = sprintf(str,"\n") ;
+    for (i = 0; i <= 48; i += 4) {
+        reg = dwt_read32bitoffsetreg(0x36, i);
+        str += cnt = sprintf(str, "reg[%02X:%02X]=%08X", 0x36, i, reg);
+        str += cnt = sprintf(str, "\n");
     }
 #endif
 }
@@ -362,28 +360,26 @@ void dwt_dumpregisters(char *str, size_t strSize)
 void Anchor_Array_Init(void)
 {
     int anchor_index = 0;
-    for(anchor_index = 0; anchor_index < ANCHOR_MAX_NUM; anchor_index++)
-    {
+    for (anchor_index = 0; anchor_index < ANCHOR_MAX_NUM; anchor_index++) {
         Anthordistance[anchor_index] = 0;
         Anthordistance_count[anchor_index] = 0;
     }
 }
+
 void Semaphore_Init(void)
 {
-    int tag_index = 0 ;
-    for(tag_index = 0; tag_index <MAX_SLAVE_TAG; tag_index++)
-    {
-        Semaphore[tag_index]  = 0;
+    int tag_index = 0;
+    for (tag_index = 0; tag_index < MAX_SLAVE_TAG; tag_index++) {
+        Semaphore[tag_index] = 0;
     }
 }
 
 int Sum_Tag_Semaphore_request(void)
 {
-    int tag_index = 0 ;
+    int tag_index = 0;
     int sum_request = 0;
-    for(tag_index = SLAVE_TAG_START_INDEX; tag_index <MAX_SLAVE_TAG; tag_index++)
-    {
-        sum_request+=Semaphore[tag_index];
+    for (tag_index = SLAVE_TAG_START_INDEX; tag_index < MAX_SLAVE_TAG; tag_index++) {
+        sum_request += Semaphore[tag_index];
     }
     return sum_request;
 }
@@ -391,53 +387,50 @@ int Sum_Tag_Semaphore_request(void)
 
 void Tag_Measure_Dis(void)
 {
-    uint8 dest_anthor = 0,frame_len = 0;
+    uint8 dest_anthor = 0, frame_len = 0;
     float final_distance = 0;
-    for(dest_anthor = 0 ;  dest_anthor<ANCHOR_MAX_NUM; dest_anthor++)
-    {
+    
+    for (dest_anthor = 0; dest_anthor < ANCHOR_MAX_NUM; dest_anthor++) {
         dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
         dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
         /* Write frame data to DW1000 and prepare transmission. See NOTE 7 below. */
         tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
         tx_poll_msg[ALL_MSG_TAG_IDX] = TAG_ID;
-        
+
         dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);
         dwt_writetxfctrl(sizeof(tx_poll_msg), 0);
 
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
          * set by dwt_setrxaftertxdelay() has elapsed. */
-        dwt_starttx(DWT_START_TX_IMMEDIATE| DWT_RESPONSE_EXPECTED);
+        dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
         //GPIO_SetBits(GPIOA,GPIO_Pin_2);
         //TODO
         dwt_rxenable(0);
-        
         /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 8 below. */
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR)))
-        { };
-        GPIO_SetBits(GPIOA,GPIO_Pin_1);
+        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
+        // aibrain_dbug("step 5, send one frame, frame_seq_nb: %05d, TAG_ID: %d", frame_seq_nb, TAG_ID);
+        GPIO_SetBits(GPIOA, GPIO_Pin_1);
 
-        if (status_reg & SYS_STATUS_RXFCG)
-        {
+        if (status_reg & SYS_STATUS_RXFCG) {
             /* Clear good RX frame event and TX frame sent in the DW1000 status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG | SYS_STATUS_TXFRS);
 
             /* A frame has been received, read it into the local buffer. */
             frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_MASK;
-            if (frame_len <= RX_BUF_LEN)
-            {
+            if (frame_len <= RX_BUF_LEN) {
                 dwt_readrxdata(rx_buffer, frame_len, 0);
             }
 
-            if(rx_buffer[ALL_MSG_TAG_IDX] != TAG_ID)
+            if (rx_buffer[ALL_MSG_TAG_IDX] != TAG_ID)
                 continue;
+            // aibrain_dbug("step 6, recv one frame, tag_id: %d", rx_buffer[ALL_MSG_TAG_IDX]);
             rx_buffer[ALL_MSG_TAG_IDX] = 0;
 
             /* As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
             rx_buffer[ALL_MSG_SN_IDX] = 0;
 
-            if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
-            {
+            if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0) {
                 uint32 final_tx_time;
 
                 /* Retrieve poll transmission and response reception timestamp. */
@@ -449,7 +442,7 @@ void Tag_Measure_Dis(void)
                 dwt_setdelayedtrxtime(final_tx_time);
 
                 /* Final TX timestamp is the transmission time we programmed plus the TX antenna delay. */
-                final_tx_ts = (((uint64)(final_tx_time & 0xFFFFFFFE)) << 8) + TX_ANT_DLY;
+                final_tx_ts = (((uint64) (final_tx_time & 0xFFFFFFFE)) << 8) + TX_ANT_DLY;
 
                 /* Write all timestamps in the final message. See NOTE 10 below. */
                 final_msg_set_ts(&tx_final_msg[FINAL_MSG_POLL_TX_TS_IDX], poll_tx_ts);
@@ -465,66 +458,58 @@ void Tag_Measure_Dis(void)
                 //TODO maybe need longer time
                 //dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
                 //dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS*2);
-                dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED );
+                dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
 
-                while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR)))
-                { };
+                while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
+                         (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
 
                 /* Increment frame sequence number after transmission of the poll message (modulo 256). */
-                if (status_reg & SYS_STATUS_RXFCG)
-                {
+                if (status_reg & SYS_STATUS_RXFCG) {
                     /* Clear good/fail RX frame event in the DW1000 status register. */
                     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG | SYS_STATUS_TXFRS);
                     /* A frame has been received, read it into the local buffer. */
                     frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_MASK;
-                    if (frame_len <= RX_BUF_LEN)
-                    {
+                    if (frame_len <= RX_BUF_LEN) {
                         dwt_readrxdata(rx_buffer, frame_len, 0);
                     }
 
-                    if(rx_buffer[ALL_MSG_TAG_IDX] != TAG_ID)
+                    if (rx_buffer[ALL_MSG_TAG_IDX] != TAG_ID)
                         continue;
                     rx_buffer[ALL_MSG_TAG_IDX] = 0;
 
                     /*As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
                     rx_buffer[ALL_MSG_SN_IDX] = 0;
 
-                    if (memcmp(rx_buffer, distance_msg, ALL_MSG_COMMON_LEN) == 0)
-                    {
-                       // final_distance = rx_buffer[10] + (float)rx_buffer[11]/100;
-                        Anthordistance[rx_buffer[12]] +=(rx_buffer[10]*1000 + rx_buffer[11]*10);
-                        Anthordistance_count[rx_buffer[12]] ++;
+                    if (memcmp(rx_buffer, distance_msg, ALL_MSG_COMMON_LEN) == 0) {
+                        // final_distance = rx_buffer[10] + (float)rx_buffer[11]/100;
+                        Anthordistance[rx_buffer[12]] += (rx_buffer[10] * 1000 + rx_buffer[11] * 10);
+                        Anthordistance_count[rx_buffer[12]]++;
                         {
                             int Anchor_Index = 0;
-                            while(Anchor_Index < ANCHOR_MAX_NUM)
-                            {
-                                if(Anthordistance_count[Anchor_Index] >=ANCHOR_REFRESH_COUNT )
-                                {
+                            while (Anchor_Index < ANCHOR_MAX_NUM) {
+                                if (Anthordistance_count[Anchor_Index] >= ANCHOR_REFRESH_COUNT) {
                                     distance_mange();
                                     Anchor_Index = 0;
-									//clear all
-                                    while(Anchor_Index < ANCHOR_MAX_NUM)
-                                    {
+                                    //clear all
+                                    while (Anchor_Index < ANCHOR_MAX_NUM) {
                                         Anthordistance_count[Anchor_Index] = 0;
                                         Anthordistance[Anchor_Index] = 0;
-										Anchor_Index++;
+                                        Anchor_Index++;
                                     }
                                     break;
                                 }
-								Anchor_Index++;
+                                Anchor_Index++;
                             }
                         }
                     }
-                }
-                else
-                {
+                } 
+                else {
                     /* Clear RX error events in the DW1000 status register. */
                     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
                 }
             }
-        }
-        else
-        {
+        } 
+        else {
             /* Clear RX error events in the DW1000 status register. */
             // sprintf(dist_str, "%08x",status_reg);
             // OLED_ShowString(0, 2,"           ");
@@ -535,7 +520,6 @@ void Tag_Measure_Dis(void)
         // deca_sleep(RNG_DELAY_MS);
         frame_seq_nb++;
     }
-
 }
 
 /**
@@ -564,6 +548,11 @@ static int aibrain_dwm1000_main(void)
 {
     uint8 anthor_index = 0;
     uint8 tag_index = 0;
+#ifdef ANTHOR
+    uint8 *use_for = "ANTHOR";
+#else
+    uint8 *use_for = "TAG";
+#endif
 
     uint8 Semaphore_Enable = 0;
     uint8 Waiting_TAG_Release_Semaphore = 0;
@@ -571,8 +560,8 @@ static int aibrain_dwm1000_main(void)
     uint32 device_id = 0;
 
     /* Start with board specific hardware init. */
-    peripherals_init();
-
+    // peripherals_init();
+dwm1000_init_start:
     aibrain_dbug("hello dwm1000!");
 
     /* Reset and initialise DW1000.
@@ -616,21 +605,24 @@ static int aibrain_dwm1000_main(void)
     AnchorList[2].z = 0;
     int rx_ant_delay = 32880;
     int index = 0;
+    
+    // 读取不到ID号的异常处理
+    aibrain_dbug("dmw use for %s", use_for);
+    device_id = dwt_read32bitreg(0);
+    aibrain_dbug("device_id: 0x%08x(=? 0x%x).", device_id, DEVICE_ID);
+    if (DEVICE_ID != device_id) {
+        aibrain_dbug("id error, retry it");
+        vTaskDelay(1000);
+        goto dwm1000_init_start;
+    }
+    is_open_debug = 0;
+
 #ifdef ANTHOR
     Anchor_Array_Init();
     /* Loop forever initiating ranging exchanges. */
     OLED_ShowString(0, 0, "DS TWR ANTHOR");
     OLED_ShowString(0, 2, "Distance:");
-
-    //KalMan_PramInit();
-    while (1) {
-        device_id = dwt_read32bitreg(0);
-        aibrain_dbug("device_id: 0x%08x(=? 0x%x).", device_id, DEVICE_ID);
-        if (DEVICE_ID == device_id)
-            break;
-        vTaskDelay(1000);
-        continue;
-    }
+    KalMan_PramInit();
 
     while (1) {
         /* Clear reception timeout to start next ranging process. */
@@ -640,9 +632,7 @@ static int aibrain_dwm1000_main(void)
 
         /* Poll for reception of a frame or error/timeout. See NOTE 7 below. */
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
-        aibrain_dbug("%s %d, status_reg: 0x%x", __func__, __LINE__, status_reg);
         if (status_reg & SYS_STATUS_RXFCG) {
-            aibrain_dbug("%s %d", __func__, __LINE__);
             /* Clear good RX frame event in the DW1000 status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG | SYS_STATUS_TXFRS);
 
@@ -656,9 +646,9 @@ static int aibrain_dwm1000_main(void)
 
             if (rx_buffer[ALL_MSG_SN_IDX] % ANCHOR_MAX_NUM != ANCHOR_IND)
                 continue;
-
             anthor_index = rx_buffer[ALL_MSG_SN_IDX] % ANCHOR_MAX_NUM;
             tag_index = rx_buffer[ALL_MSG_TAG_IDX];
+            aibrain_dbug("step 0, recv one frame, anthor_index: %d, tag_index: %d", anthor_index, tag_index);
 
             rx_buffer[ALL_MSG_SN_IDX] = 0;
             rx_buffer[ALL_MSG_TAG_IDX] = 0;
@@ -680,9 +670,8 @@ static int aibrain_dwm1000_main(void)
                 dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0);
                 dwt_writetxfctrl(sizeof(tx_resp_msg), 0);
                 dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-
-                while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
-                         (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
+                while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
+                aibrain_dbug("step 1, send one frame, frame_seq_nb: %d, tag_index: %d", frame_seq_nb, tag_index);
 
                 if (status_reg & SYS_STATUS_RXFCG) {
                     /* Clear good RX frame event and TX frame sent in the DW1000 status register. */
@@ -697,6 +686,7 @@ static int aibrain_dwm1000_main(void)
                     rx_buffer[ALL_MSG_SN_IDX] = 0;
                     if (tag_index != rx_buffer[ALL_MSG_TAG_IDX])
                         continue;
+                    aibrain_dbug("step 2, recv one frame, frame_len: %d, tag_index: %d", frame_len, tag_index);
                     rx_buffer[ALL_MSG_TAG_IDX] = 0;
                     if (memcmp(rx_buffer, rx_final_msg, ALL_MSG_COMMON_LEN) == 0) {
                         uint32 poll_tx_ts, resp_rx_ts, final_tx_ts;
@@ -713,6 +703,7 @@ static int aibrain_dwm1000_main(void)
                         final_msg_get_ts(&rx_buffer[FINAL_MSG_RESP_RX_TS_IDX], &resp_rx_ts);
                         final_msg_get_ts(&rx_buffer[FINAL_MSG_FINAL_TX_TS_IDX], &final_tx_ts);
 
+                        aibrain_dbug("step 2, poll_tx_ts: %d, resp_rx_ts: %d, final_tx_ts: %d", poll_tx_ts, resp_rx_ts, final_tx_ts);
                         /* Compute time of flight. 32-bit subtractions give correct answers even if clock has wrapped. See NOTE 10 below. */
                         poll_rx_ts_32 = (uint32) poll_rx_ts;
                         resp_tx_ts_32 = (uint32) resp_tx_ts;
@@ -729,7 +720,7 @@ static int aibrain_dwm1000_main(void)
                         // sprintf(dist_str, "dis: %3.2f m", distance);
                         //printf("before kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         //kalman filter
-                        //distance =  KalMan_Update(&distance);
+                        distance =  KalMan_Update(&distance);
                         //  sprintf(dist_str, "dis: %3.2f m", distance);
                         //    printf("after kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         int temp = (int) (distance * 100);
@@ -753,6 +744,7 @@ static int aibrain_dwm1000_main(void)
                         // sprintf(dist_str, "DIST: %3.2f m", distance);
                         //lcd_display_str(dist_str);
                         // OLED_ShowString(0,6,dist_str);
+                        aibrain_dbug("step 3, frame_seq_nb: %d, tag_index: %d, distance: %d", frame_seq_nb, tag_index, temp);
                     }
                 }
                 else {
@@ -774,7 +766,7 @@ static int aibrain_dwm1000_main(void)
             }
         }
         else {
-            aibrain_dbug("%s %d", __func__, __LINE__);
+            aibrain_dbug("clear rx errorm wait timeout...");
             /* Clear RX error events in the DW1000 status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
         }
@@ -787,7 +779,8 @@ static int aibrain_dwm1000_main(void)
     dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
     if (TAG_ID == MASTER_TAG) {
         OLED_ShowString(0, 0, "DS MASTER TAG:");
-    } else {
+    }
+    else {
         OLED_ShowString(0, 0, "DS SLAVE TAG:");
     }
 
@@ -821,12 +814,12 @@ static int aibrain_dwm1000_main(void)
                 dwt_starttx(DWT_START_TX_IMMEDIATE);
                 while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS)) {};
                 GPIO_SetBits(GPIOA, GPIO_Pin_2);
+                aibrain_dbug("step 0, send one frame, frame_seq_nb: %d, TAG_ID: %d", frame_seq_nb, TAG_ID);
             }
         }
 
-        if (TAG_ID == MASTER_TAG)//master  tag
-        {
-            //statistics tag
+        if (TAG_ID == MASTER_TAG) { // master tag
+            // statistics tag
             if (Sum_Tag_Semaphore_request() == 0) {
                 for (tag_index = SLAVE_TAG_START_INDEX; tag_index < MAX_SLAVE_TAG; tag_index++) {
                     Tag_Statistics[ALL_MSG_SN_IDX] = 0;
@@ -834,30 +827,31 @@ static int aibrain_dwm1000_main(void)
                     dwt_writetxdata(sizeof(Tag_Statistics), Tag_Statistics, 0);
                     dwt_writetxfctrl(sizeof(Tag_Statistics), 0);
                     dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-
-                    while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
-                             (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
-
+                    while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
+                    aibrain_dbug("step 1, send one frame, tag_index: %d", tag_index);
                     if (status_reg & SYS_STATUS_RXFCG) {
                         /* Clear good RX frame event and TX frame sent in the DW1000 status register. */
                         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG | SYS_STATUS_TXFRS);
                         /* A frame has been received, read it into the local buffer. */
                         frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_MASK;
+                        memset(rx_buffer, 0, sizeof(rx_buffer));
                         if (frame_len <= RX_BUF_LEN) {
                             dwt_readrxdata(rx_buffer, frame_len, 0);
                         }
                         rx_buffer[ALL_MSG_SN_IDX] = 0;
-
+                        aibrain_dbug("step 2, recv one frame, frame_len: %d, rx_tag_index: %d", frame_len, rx_buffer[ALL_MSG_TAG_IDX]);
                         if (rx_buffer[ALL_MSG_TAG_IDX] == tag_index) {
                             uint8 temp = rx_buffer[ALL_MSG_TAG_IDX];
                             rx_buffer[ALL_MSG_TAG_IDX] = 0;
                             if (memcmp(rx_buffer, Tag_Statistics_response, ALL_MSG_COMMON_LEN) == 0) {
                                 Semaphore[temp] = 1;
                                 GPIO_SetBits(GPIOA, GPIO_Pin_2);
+                                aibrain_dbug("step 3, mark semaphore tag_index: %d", tag_index);
                             }
                         }
                     }
                     else {
+                        aibrain_dbug("clear rx error events");
                         /* Clear RX error events in the DW1000 status register. */
                         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
                         //GPIO_SetBits(GPIOA,GPIO_Pin_1);
@@ -866,7 +860,7 @@ static int aibrain_dwm1000_main(void)
                 //print all the tags in network
                 for (tag_index = SLAVE_TAG_START_INDEX; tag_index < MAX_SLAVE_TAG; tag_index++) {
                     if (Semaphore[tag_index] == 1) {
-                        // printf("Tag%d In NetWork!\r\n",tag_index);
+                        aibrain_dbug("tag_%d in network!", tag_index);
                     }
                 }
             }
@@ -878,7 +872,7 @@ static int aibrain_dwm1000_main(void)
                 Semaphore[0] = 0;//slave tag must not use tag_id = 0x00!!
                 for (tag_index = SLAVE_TAG_START_INDEX; tag_index < MAX_SLAVE_TAG; tag_index++) {
                     if (Semaphore[tag_index] == 1) {
-                        // printf("Release Semaphore to Tag%d!\r\n",tag_index);
+                        aibrain_dbug("release semaphore to tag_%d!", tag_index);
                         // dwt_setrxtimeout(0);
 
                         dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
@@ -889,8 +883,7 @@ static int aibrain_dwm1000_main(void)
                         dwt_writetxfctrl(sizeof(Master_Release_Semaphore), 0);
                         dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
-                        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
-                                 (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
+                        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_ERR))) {};
 
                         if (status_reg & SYS_STATUS_RXFCG) {
                             GPIO_SetBits(GPIOA, GPIO_Pin_1);
@@ -904,7 +897,7 @@ static int aibrain_dwm1000_main(void)
                             if (rx_buffer[ALL_MSG_TAG_IDX] == tag_index) {
                                 rx_buffer[ALL_MSG_TAG_IDX] = 0;
                                 GPIO_SetBits(GPIOA, GPIO_Pin_3);
-                                // USART_puts(rx_buffer,frame_len);
+                                aibrain_dbug("step 3, recv one frame, frame_len: %d, tag_index: %d", frame_len, tag_index);
                                 if (memcmp(rx_buffer, Master_Release_Semaphore_comfirm, ALL_MSG_COMMON_LEN) == 0) {
                                     //if the tag recive a semaphore, wait release remaphore
                                     Waiting_TAG_Release_Semaphore++;
@@ -912,10 +905,9 @@ static int aibrain_dwm1000_main(void)
                                 }
                             }
                         }
-                        else//the tag may leave net,clear semaphore
-                        {
+                        else { // the tag may leave net,clear semaphore
                             Semaphore[tag_index] = 0;
-                            //printf("tag may leave net!\r\n");
+                            aibrain_dbug("tag may leave net!");
                             //GPIO_SetBits(GPIOA,GPIO_Pin_1);
                             /* Clear RX error events in the DW1000 status register. */
                             //sprintf(dist_str, "%08x",status_reg);
@@ -931,7 +923,7 @@ static int aibrain_dwm1000_main(void)
             }
             //Master tag waitting for specific tag Semaphore Release message
             if (Waiting_TAG_Release_Semaphore > 0) {
-                //  printf("Waiting for Release Semaphore!\r\n");
+                aibrain_dbug("waiting for release semaphore!");
                 dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS * 5);//about 10ms,need adjust!!
                 dwt_rxenable(0);
                 while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
@@ -974,6 +966,7 @@ static int aibrain_dwm1000_main(void)
             }
         }
         else {     //slave tags
+            aibrain_dbug("run slave tags!!!");
             //SLAVE TAG 
             dwt_setrxtimeout(0);
             dwt_rxenable(0);
@@ -1036,26 +1029,21 @@ int filter(int input, int fliter_idx )
 {
     char count = 0;
     int sum = 0;
-    if(input > 0)
-    {
-        Value_Buf[fliter_idx][filter_index[fliter_idx]++]=input;
-        if(filter_index[fliter_idx] == Filter_D) filter_index[fliter_idx] = 0;
+    if (input > 0) {
+        Value_Buf[fliter_idx][filter_index[fliter_idx]++] = input;
+        if (filter_index[fliter_idx] == Filter_D) filter_index[fliter_idx] = 0;
 
-        for(count = 0; count<Filter_D; count++)
-        {
+        for (count = 0; count < Filter_D; count++) {
             sum += Value_Buf[fliter_idx][count];
         }
-        return (int)(sum/Filter_D);
+        return (int) (sum / Filter_D);
     }
-    else
-    {
-        for(count = 0; count<Filter_D; count++)
-        {
+    else {
+        for (count = 0; count < Filter_D; count++) {
             sum += Value_Buf[fliter_idx][count];
         }
-        return (int)(sum/Filter_D);
+        return (int) (sum / Filter_D);
     }
-
 }
 
 static void distance_mange(void)
@@ -1072,55 +1060,48 @@ static void distance_mange(void)
     // OLED_ShowString(0, 2,"pass");
 
     //printf("Count:%d %d %d \r\n",Anthordistance[0]/Anthordistance_count[0],Anthordistance[1]/Anthordistance_count[1],Anthordistance[2]/Anthordistance_count[2]);
-   // Anthordistance[0] =filter((int)(Anthordistance[0]/Anthordistance_count[0]),0);
-   // Anthordistance[1] =filter((int)(Anthordistance[1]/Anthordistance_count[1]),1);
-   // Anthordistance[2] = filter((int)(Anthordistance[2]/Anthordistance_count[2]),2);
+    // Anthordistance[0] =filter((int)(Anthordistance[0]/Anthordistance_count[0]),0);
+    // Anthordistance[1] =filter((int)(Anthordistance[1]/Anthordistance_count[1]),1);
+    // Anthordistance[2] = filter((int)(Anthordistance[2]/Anthordistance_count[2]),2);
     //printf("Count:%d %d %d \r\n",Anthordistance_count[0],Anthordistance_count[1],Anthordistance_count[2]);
     //printf("Count:%d %d %d \r\n",Anthordistance[0],Anthordistance[1],Anthordistance[2]);
     //printf(" \r\n");
 
     {
         int Anchor_Index = 0;
-        while(Anchor_Index < ANCHOR_MAX_NUM)
-        {
-            if(Anthordistance_count[Anchor_Index] > 0 )
-            {
-                Anthordistance[Anchor_Index] =filter((int)(Anthordistance[Anchor_Index]/Anthordistance_count[Anchor_Index]),Anchor_Index);
+        while (Anchor_Index < ANCHOR_MAX_NUM) {
+            if (Anthordistance_count[Anchor_Index] > 0) {
+                Anthordistance[Anchor_Index] = filter(
+                        (int) (Anthordistance[Anchor_Index] / Anthordistance_count[Anchor_Index]), Anchor_Index);
             }
-			Anchor_Index++;
+            Anchor_Index++;
         }
     }
 
-    compute_angle_send_to_anthor0(Anthordistance[0], Anthordistance[1],Anthordistance[2]);
+    compute_angle_send_to_anthor0(Anthordistance[0], Anthordistance[1], Anthordistance[2]);
 
-
-    if(Anthordistance_count[0]>0)
-    {
-        sprintf(dist_str, "an0:%3.2fm", (float)Anthordistance[0]/1000);
-        OLED_ShowString(0, 2, (uint8_t *)" 		   ");
-        OLED_ShowString(0, 2, (uint8_t *)dist_str);
+    if (Anthordistance_count[0] > 0) {
+        sprintf(dist_str, "an0:%3.2fm", (float) Anthordistance[0] / 1000);
+        OLED_ShowString(0, 2, (uint8_t *) " 		   ");
+        OLED_ShowString(0, 2, (uint8_t *) dist_str);
+        aibrain_dbug("%s", dist_str);
     }
 
-
-    if(Anthordistance_count[1]>0)
-    {
-        sprintf(dist_str, "an1:%3.2fm", (float)Anthordistance[1]/1000);
-        OLED_ShowString(0, 4, (uint8_t *)"		 ");
-        OLED_ShowString(0, 4, (uint8_t *)dist_str);
+    if (Anthordistance_count[1] > 0) {
+        sprintf(dist_str, "an1:%3.2fm", (float) Anthordistance[1] / 1000);
+        OLED_ShowString(0, 4, (uint8_t *) "		 ");
+        OLED_ShowString(0, 4, (uint8_t *) dist_str);
+        aibrain_dbug("%s", dist_str);
     }
 
-
-    if(Anthordistance_count[2]>0)
-    {
-        sprintf(dist_str, "an2:%3.2fm", (float)Anthordistance[2]/1000);
-        OLED_ShowString(0, 6, (uint8_t *)"		 ");
-        OLED_ShowString(0, 6, (uint8_t *)dist_str);
+    if (Anthordistance_count[2] > 0) {
+        sprintf(dist_str, "an2:%3.2fm", (float) Anthordistance[2] / 1000);
+        OLED_ShowString(0, 6, (uint8_t *) "		 ");
+        OLED_ShowString(0, 6, (uint8_t *) dist_str);
+        aibrain_dbug("%s", dist_str);
     }
     // printf("Distance:%d,   %d,    %d mm\r\n",(int)((float)Anthordistance[0]/Anthordistance_count[0]),(int)((float)Anthordistance[1]/Anthordistance_count[1]),(int)((float)Anthordistance[2]/Anthordistance_count[2]));
 }
-
-
-
 
 
 #define DISTANCE3 0.9
@@ -1130,49 +1111,43 @@ static void distance_mange(void)
 //distance2 anthor1 <--> TAG  mm
 //distance3 anthor2 <--> TAG  mm
 //**************************************************************//
-static void compute_angle_send_to_anthor0(int distance1, int distance2,int distance3)
+static void compute_angle_send_to_anthor0(int distance1, int distance2, int distance3)
 {
-    static int framenum = 0 ;
+    static int framenum = 0;
 
 #if 1 //compute angle for smartcar
     float dis3_constans = DISTANCE3;
     float cos = 0;
-    float angle = 0 ;
-    float dis1 = (float)distance1/1000; //m
-    float dis2 = (float)distance2/1000;  //m
+    float angle = 0;
+    float dis1 = (float) distance1 / 1000; //m
+    float dis2 = (float) distance2 / 1000;  //m
 
-    if(dis1 + dis3_constans < dis2 || dis2+dis3_constans < dis1)
-    {
+    if (dis1 + dis3_constans < dis2 || dis2 + dis3_constans < dis1) {
         //printf("ERROR!\r\n");
         //return;
     }
-    cos = (dis1*dis1 + dis3_constans* dis3_constans - dis2*dis2)/(2*dis1*dis3_constans);
-    angle  = acos(cos)*180/3.1415926;
-    aibrain_dbug("cos = %f, arccos = %f",cos,angle);
+    cos = (dis1 * dis1 + dis3_constans * dis3_constans - dis2 * dis2) / (2 * dis1 * dis3_constans);
+    angle = acos(cos) * 180 / 3.1415926;
+    aibrain_dbug("cos = %f, arccos = %f", cos, angle);
     sprintf(dist_str, "angle: %3.2f m", angle);
-    OLED_ShowString(0, 6, (uint8_t *)"            ");
-    OLED_ShowString(0, 6, (uint8_t *)dist_str);
+    OLED_ShowString(0, 6, (uint8_t *) "            ");
+    OLED_ShowString(0, 6, (uint8_t *) dist_str);
 
-    if(dis1 > 1)
-    {
-        if(angle > 110)
-        {
+    if (dis1 > 1) {
+        if (angle > 110) {
             aibrain_dbug("turn right");
             angle_msg[10] = 'R';
         }
-        else if(angle < 75)
-        {
+        else if (angle < 75) {
             aibrain_dbug("turn left");
             angle_msg[10] = 'L';
         }
-        else
-        {
+        else {
             aibrain_dbug("forward");
             angle_msg[10] = 'F';
         }
     }
-    else
-    {
+    else {
         aibrain_dbug("stay here");
         angle_msg[10] = 'S';
     }
@@ -1225,12 +1200,10 @@ static void compute_angle_send_to_anthor0(int distance1, int distance2,int dista
 
     /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
      * set by dwt_setrxaftertxdelay() has elapsed. */
-    dwt_starttx(DWT_START_TX_IMMEDIATE );
-    while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS))
-    { };
+    dwt_starttx(DWT_START_TX_IMMEDIATE);
+    while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS)) {};
 
     framenum++;
-
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -1577,6 +1550,29 @@ end:
     return 0;
 }
 
+static int aibrain_log_set(void *argv, char *response)
+{
+    int n, v = 0;
+    const char *response_ok = "RE+LOG=OK", *response_fail = "RE+LOG=FAIL";
+    const char *response_str = NULL;
+    char buff[10] = {0};
+    
+    n = aibrain_strcpy((char *)argv, buff, "=", "\r\n");
+    if (!n) {
+        response_str = response_fail;
+        goto end;
+    }
+    v = atoi(buff);
+    is_open_debug = v;
+    response_str = response_ok;
+end:
+    if (response) {
+        strncpy(response, response_str, strlen(response_str));
+    }
+
+    return 0;
+}
+
 /*!
  * @fn aibrain_strcpy()
  * @brief 拷贝字符串，从start_chr字符串里边的字符起始，直到遇见end_chr字符串里边的字符
@@ -1627,11 +1623,12 @@ static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr)
     return n;
 }
 
-static struct aibrain_atcmd_map aibrain_at_map_list[] = 
+static const struct aibrain_atcmd_map aibrain_at_map_list[] = 
 {
-    {"AT+MINIT", aibrain_motor_init},
-    {"AT+MPWM", aibrain_motor_set_pwm},
-    {"AT+MDIR", aibrain_motor_set_dir},
+    {"AT+MINIT",    aibrain_motor_init},
+    {"AT+MPWM",     aibrain_motor_set_pwm},
+    {"AT+MDIR",     aibrain_motor_set_dir},
+    {"AT+LOG",      aibrain_log_set},
 };
 
 static void aibrain_at_response(char *response_str)
