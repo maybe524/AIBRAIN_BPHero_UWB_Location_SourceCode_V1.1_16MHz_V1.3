@@ -57,7 +57,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-//#define ANTHOR
+#define ANTHOR
+#define CONFIG_KALMAN_SUPPORT
 
 /* Example application name and version to display on LCD screen. */
 #define RNG_DELAY_MS 5
@@ -622,7 +623,9 @@ dwm1000_init_start:
     /* Loop forever initiating ranging exchanges. */
     OLED_ShowString(0, 0, "DS TWR ANTHOR");
     OLED_ShowString(0, 2, "Distance:");
+#ifdef CONFIG_KALMAN_SUPPORT
     KalMan_PramInit();
+#endif
 
     while (1) {
         /* Clear reception timeout to start next ranging process. */
@@ -720,7 +723,9 @@ dwm1000_init_start:
                         // sprintf(dist_str, "dis: %3.2f m", distance);
                         //printf("before kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         //kalman filter
+#ifdef CONFIG_KALMAN_SUPPORT
                         distance =  KalMan_Update(&distance);
+#endif
                         //  sprintf(dist_str, "dis: %3.2f m", distance);
                         //    printf("after kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         int temp = (int) (distance * 100);

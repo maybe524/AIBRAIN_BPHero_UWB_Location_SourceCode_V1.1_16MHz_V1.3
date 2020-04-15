@@ -4,51 +4,51 @@
 #include "matrix.h"				 				 		
 
 /*==============================================================================
-1.Ԥ����
-   X(k|k-1) = F(k,k-1)*X(k-1|k-1)        //������Ϊ0
+1.预估计
+   X(k|k-1) = F(k,k-1)*X(k-1|k-1)        //控制量为0
 
 
-2.����Ԥ����Э�������
+2.计算预估计协方差矩阵
    P(k|k-1) = F(k,k-1)*P(k-1|k-1)*F(k,k-1)'+Q(k)
-   Q(k) = U(k)��U(k)' 
+   Q(k) = U(k)×U(k)' 
 
 
-3.���㿨�����������
+3.计算卡尔曼增益矩阵
    Kg(k) = P(k|k-1)*H' / (H*P(k|k-1)*H' + R(k))
-   R(k) = N(k)��N(k)' 
+   R(k) = N(k)×N(k)' 
 
 
-4.���¹���
+4.更新估计
    X(k|k) = X(k|k-1)+Kg(k)*(Z(k)-H*X(k|k-1))
 
 
-5.������º����Э�������
-   P(k|k) =��I-Kg(k)*H��*P(k|k-1)
+5.计算更新后估计协防差矩阵
+   P(k|k) =（I-Kg(k)*H）*P(k|k-1)
 
 
-6. ��������ֵ
+6. 更新最优值
 
 
-F(k,k-1):     ״̬ת�ƾ���
-X(k|k-1):     ����k-1ʱ�̵�����ֵ����kʱ�̵�ֵ
-X(k-1|k-1):   k-1ʱ�̵�����ֵ
-P(k|k-1):     X(k|k-1)��Ӧ��covariance
-P(k-1|k-1):   X(k-1|k-1)��Ӧ��covariance
-Q(k):         ϵͳ���̵�covariance
-R(k):         �������̵�Э����
-H(k):         �۲����ת�ƾ���
-Z(k):         kʱ�̵Ĳ���ֵ
+F(k,k-1):     状态转移矩阵
+X(k|k-1):     根据k-1时刻的最优值估计k时刻的值
+X(k-1|k-1):   k-1时刻的最优值
+P(k|k-1):     X(k|k-1)对应的covariance
+P(k-1|k-1):   X(k-1|k-1)对应的covariance
+Q(k):         系统过程的covariance
+R(k):         测量过程的协方差
+H(k):         观测矩阵转移矩阵
+Z(k):         k时刻的测量值
 
 
-����˼·: ���ȸ�����һ��(����ǵ�һ�������Ԥ��ֵ����)�����ݼ�������εĹ���ֵ,
-          ͬ��,������һ�ε����ݼ�������ι���ֵ��Э����;  ����,�ɱ��ι���ֵ��Э
-          ������������������;  ���,���ݹ���ֵ�Ͳ���ֵ���㵱ǰ����ֵ����Э����
+基本思路: 首先根据上一次(如果是第一次则根据预赋值计算)的数据计算出本次的估计值,
+          同理,根据上一次的数据计算出本次估计值的协方差;  接着,由本次估计值的协
+          方差计算出卡尔曼增益;  最后,根据估测值和测量值计算当前最优值及其协方差
 ==============================================================================*/
 
 
 
 //================================================//
-//==             ����ֵ����ṹ��               ==//
+//==             最优值方差结构体               ==//
 //================================================//
 typedef struct  _tCovariance
 {
@@ -64,24 +64,24 @@ typedef struct  _tCovariance
 
 static tOptimal      tOpt;
 static tCovariance   tCov;
-//float         Z[LENGTH]  = {4000};           //  ����ֵ(ÿ�β�����������Ҫ���������)
-static float         I[LENGTH]  = {1};              //  ��λ����
-static float         X[LENGTH]  = {9.8};              //  ��ǰ״̬��Ԥ��ֵ
-static float         P[LENGTH]  = {0};              //  ��ǰ״̬��Ԥ��ֵ��Э����
-static float         K[LENGTH]  = {0};              //  ����������
-static float         Temp3[LENGTH] = {0};           //  ��������
+//float         Z[LENGTH]  = {4000};           //  测量值(每次测量的数据需要存入该数组)
+static float         I[LENGTH]  = {1};              //  单位矩阵
+static float         X[LENGTH]  = {9.8};              //  当前状态的预测值
+static float         P[LENGTH]  = {0};              //  当前状态的预测值的协方差
+static float         K[LENGTH]  = {0};              //  卡尔曼增益
+static float         Temp3[LENGTH] = {0};           //  辅助变量
 //============================================================================//
-//==                    �������˲���Ҫ���õı���                            ==//
+//==                    卡尔曼滤波需要配置的变量                            ==//
 //============================================================================//
-static float         F[LENGTH]  = {1};              //  ״̬ת�ƾ���   �������ŵ�ǰ��״̬����һ��״̬�Ĺ�ϵ�����������һ���ģ���״̬ת�ƾ����Ϊ��λ����
-static float         Q[LENGTH]  = {0.0001f};//0.0001f              //  ϵͳ���̵�Э����	Э����Ķ��壺��ʵֵ������ֵ֮���ƽ��������ֵ
-static float         R[LENGTH]  = {2};              //  �������̵�Э����	Э����Ķ��壺��ʵֵ������ֵ֮���ƽ��������ֵ   
-//�������Ҫ�˲�����������ڹ۲������Ǿ͵�СR������Q����֮������R����СQ����������ֵ��ȡ����ϵͳ��
-//���R��QС������˵��״̬����ֵ�Ȳ���ֵҪ�ɿ�����ʱ�����ó��Ľ�����Ǹ��ӽ�����ֵ��
-//���RСQ����ʱ����������Ľ���ͻ���ӽ�����ֵ��
-static float         H[LENGTH]  = {1};              //  �۲����ת�ƾ���	����ֵ��״̬Ԥ��ֵ֮��ĵ�λ�����ϵ������Ԥ��ֵ��λ����ɲ���ֵ��λ
-static float         Temp1[LENGTH] = {1};           //  ��������, ͬʱ����tOpt.XPreOpt[]�ĳ�ʼ��ֵ
-static float         Temp2[LENGTH] = {10000};       //  ��������, ͬʱ����tCov.PPreOpt[]�ĳ�ʼ��ֵ
+static float         F[LENGTH]  = {1};              //  状态转移矩阵   即：坚信当前的状态与上一次状态的关系，如果坚信是一样的，则状态转移矩阵就为单位矩阵
+static float         Q[LENGTH]  = {0.0001f};//0.0001f              //  系统过程的协方差	协方差的定义：真实值与期望值之差的平方的期望值
+static float         R[LENGTH]  = {2};              //  测量过程的协方差	协方差的定义：真实值与期望值之差的平方的期望值   
+//如果你需要滤波结果更依赖于观测量，那就调小R，增大Q；反之，调大R，调小Q，这样估计值就取决于系统。
+//如果R大Q小，就是说，状态估计值比测量值要可靠，这时，所得出的结果就是更接近估计值；
+//如果R小Q大，这时，计算出来的结果就会更接近测量值。
+static float         H[LENGTH]  = {1};              //  观测矩阵转移矩阵	测量值与状态预测值之间的单位换算关系，即把预测值单位换算成测量值单位
+static float         Temp1[LENGTH] = {1};           //  辅助变量, 同时保存tOpt.XPreOpt[]的初始化值
+static float         Temp2[LENGTH] = {10000};       //  辅助变量, 同时保存tCov.PPreOpt[]的初始化值
 
 
 void KalMan_PramInit(void)
@@ -90,45 +90,45 @@ void KalMan_PramInit(void)
   
   for (i=0; i<LENGTH; i++)
   {
-    tOpt.XPreOpt[i] = Temp1[i];           //��ֵ��ʼ��
+    tOpt.XPreOpt[i] = Temp1[i];           //零值初始化
   }
   for (i=0; i<LENGTH; i++)
   {
-    tCov.PPreOpt[i] = Temp2[i];           //��ֵ��ʼ��
+    tCov.PPreOpt[i] = Temp2[i];           //零值初始化
   }
 }
 
 
 //============================================================================//
-//==                          �������˲�                                    ==//
+//==                          卡尔曼滤波                                    ==//
 //============================================================================//
-//==��ڲ���: ��ǰʱ�̵Ĳ���ֵ                                                            ==//
-//==���ڲ���: ��ǰʱ�̵�����ֵ                                                            ==//
-//==����ֵ:   ��ǰʱ�̵�����ֵ                                                            ==//
+//==入口参数: 当前时刻的测量值                                                            ==//
+//==出口参数: 当前时刻的最优值                                                            ==//
+//==返回值:   当前时刻的最优值                                                            ==//
 //============================================================================//
 float KalMan_Update(double *Z)
 {
 	u8 i;  
-	MatrixMul(F, tOpt.XPreOpt, X, ORDER, ORDER, ORDER);       //  ����ϵͳ����һ״̬��Ԥ������״̬; X(k|k-1) = F(k,k-1)*X(k-1|k-1)
+	MatrixMul(F, tOpt.XPreOpt, X, ORDER, ORDER, ORDER);       //  基于系统的上一状态而预测现在状态; X(k|k-1) = F(k,k-1)*X(k-1|k-1)
 
 	MatrixCal(F, tCov.PPreOpt, Temp1, ORDER);
-	MatrixAdd(Temp1, Q, P, ORDER, ORDER);                     //  Ԥ�����ݵ�Э�������; P(k|k-1) = F(k,k-1)*P(k-1|k-1)*F(k,k-1)'+Q
+	MatrixAdd(Temp1, Q, P, ORDER, ORDER);                     //  预测数据的协方差矩阵; P(k|k-1) = F(k,k-1)*P(k-1|k-1)*F(k,k-1)'+Q
 
 	MatrixCal(H, P, Temp1, ORDER);
 	MatrixAdd(Temp1, R, Temp1, ORDER, ORDER);
 	Gauss_Jordan(Temp1, ORDER);
 	MatrixTrans(H, Temp2, ORDER, ORDER);
 	MatrixMul(P, Temp2, Temp3, ORDER, ORDER, ORDER);
-	MatrixMul(Temp1, Temp3, K, ORDER, ORDER, ORDER);          //  ���㿨��������; Kg(k) = P(k|k-1)*H' / (H*P(k|k-1)*H' + R)
+	MatrixMul(Temp1, Temp3, K, ORDER, ORDER, ORDER);          //  计算卡尔曼增益; Kg(k) = P(k|k-1)*H' / (H*P(k|k-1)*H' + R)
 
 	MatrixMul(H, X, Temp1, ORDER, ORDER, ORDER);
 	MatrixMinus(Z, Temp1, Temp1, ORDER, ORDER);
 	MatrixMul(K, Temp1, Temp2, ORDER, ORDER, ORDER);
-	MatrixAdd(X, Temp2, tOpt.XNowOpt, ORDER, ORDER);          //  ���ݹ���ֵ�Ͳ���ֵ���㵱ǰ����ֵ; X(k|k) = X(k|k-1)+Kg(k)*(Z(k)-H*X(k|k-1))
+	MatrixAdd(X, Temp2, tOpt.XNowOpt, ORDER, ORDER);          //  根据估测值和测量值计算当前最优值; X(k|k) = X(k|k-1)+Kg(k)*(Z(k)-H*X(k|k-1))
 
 	MatrixMul(K, H, Temp1, ORDER, ORDER, ORDER);
 	MatrixMinus((double *)I, Temp1, Temp1, ORDER, ORDER);
-	MatrixMul(Temp1, P, tCov.PNowOpt, ORDER, ORDER, ORDER);   //  ������º����Э�������; P(k|k) =��I-Kg(k)*H��*P(k|k-1)
+	MatrixMul(Temp1, P, tCov.PNowOpt, ORDER, ORDER, ORDER);   //  计算更新后估计协防差矩阵; P(k|k) =（I-Kg(k)*H）*P(k|k-1)
 
 	for (i=0; i<LENGTH; i++)
 	{
@@ -138,3 +138,52 @@ float KalMan_Update(double *Z)
 	
 	return tOpt.XNowOpt[0];
 }
+
+// 以高度为例 定义卡尔曼结构体并初始化参数
+KFP KFP_height = {0.02, 0, 0, 0, 0.001, 0.543};
+
+/**
+ * 卡尔曼滤波器
+ *@param KFP *kfp 卡尔曼结构体参数
+ *       float input 需要滤波的参数的测量值（即传感器的采集值）
+ *@return 滤波后的参数（最优值）
+ */
+float kalmanFilter(KFP *kfp, float input)
+{
+    // 预测协方差方程：k时刻系统估算协方差 = k-1时刻的系统协方差 + 过程噪声协方差
+    kfp->Now_P = kfp->LastP + kfp->Q;
+
+    // 卡尔曼增益方程：卡尔曼增益 = k时刻系统估算协方差 / (k时刻系统估算协方差 + 观测噪声协方差)
+    kfp->Kg = kfp->Now_P / (kfp->Now_P + kfp->R);
+
+    // 更新最优值方程：k时刻状态变量的最优值 = 状态变量的预测值 + 卡尔曼增益 * (测量值 - 状态变量的预测值)
+    kfp->out = kfp->out + kfp->Kg * (input -kfp->out);// 因为这一次的预测值就是上一次的输出值
+
+    // 更新协方差方程: 本次的系统协方差付给 kfp->LastP 威下一次运算准备。
+    kfp->LastP = (1 - kfp->Kg) * kfp->Now_P;
+     
+    return kfp->out;
+}
+
+#ifdef CONFIG_KALMAN_TEST
+/**
+ * 调用卡尔曼滤波器 实践
+ */
+int main()
+{
+    int height, i;
+    float kalman_height = 0;
+    float test_data[] = {1, 10, 3, 9, 2, 7, 5, 6, 3, 2, 2, 1, 0, 3, 3.5, 5.1, 4, 4.6, 3, 3,4, 5, 4.6, 4.2, 3.5, 5.2, 3.9};
+
+    while (1) {
+        for (i = 0; i < sizeof(test_data) / sizeof(float); i++) {
+            kalman_height = kalmanFilter(&KFP_height,(float)test_data[i]);
+            printf("%02d\t%f\t%f\n", i + 1, kalman_height, (float)test_data[i]);
+        }
+        printf("LastP: %f, Now_P: %f, Kg: %f, Q: %f, R: %f\n\n", KFP_height.LastP, KFP_height.Now_P, KFP_height.Kg, KFP_height.Q, KFP_height.R);
+        sleep(1);
+    }
+    
+    return 0;
+}
+#endif
