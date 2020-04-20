@@ -56,9 +56,13 @@
 #include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "kalman.h"
+#include "matrix.h"
 
 #define ANTHOR
-#define CONFIG_KALMAN_SUPPORT
+// #define CONFIG_KALMAN_SUPPORT
+// 给基站设定一个标识号
+#define ANCHOR_IND 0  // 0 1 2
 
 /* Example application name and version to display on LCD screen. */
 #define RNG_DELAY_MS 5
@@ -139,6 +143,7 @@ static int is_at_prepare = 0;
 static char at_buff[64] = {0};
 static int at_buff_index = 0;
 static char is_motor_inited = 0, is_open_debug = 1;
+extern KFP KFP_height;
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 2 below). */
 #define ALL_MSG_COMMON_LEN 10
@@ -234,8 +239,6 @@ void USART_puts(uint8_t *s,uint8_t len);
 
 // #define ANTHOR
 #define ANCHOR_MAX_NUM 3
-// 给基站设定一个标识号
-#define ANCHOR_IND 0  // 0 1 2
 //#define ANCHOR_IND ANCHOR_NUM
 
 uint8 Semaphore[MAX_SLAVE_TAG];
@@ -724,8 +727,9 @@ dwm1000_init_start:
                         //printf("before kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         //kalman filter
 #ifdef CONFIG_KALMAN_SUPPORT
-                        distance =  KalMan_Update(&distance);
+                        distance = KalMan_Update(&distance);
 #endif
+                        distance = kalmanFilter(&KFP_height, distance);
                         //  sprintf(dist_str, "dis: %3.2f m", distance);
                         //    printf("after kalman fliter Distance:%3.2f m\r\n",rx_buffer[12],final_distance);
                         int temp = (int) (distance * 100);
