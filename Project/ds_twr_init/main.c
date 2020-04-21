@@ -216,7 +216,7 @@ static uint64 final_tx_ts;
 
 /* Hold copies of computed time of flight and distance here for reference, so reader can examine it at a breakpoint. */
 static double tof;
-static double distance;
+static double distance = 0;
 
 /* String used to display measured distance on LCD screen (16 characters maximum). */
 char dist_str[16] = {0};
@@ -1582,6 +1582,22 @@ end:
     return 0;
 }
 
+// 获取距离，单位厘米
+static int aibrain_distance_get(void *argv, char *response)
+{
+    int n, v = 0;
+    const char *response_ok = "RE+DIST=", *response_fail = "RE+DIST=FAIL";
+    const char *response_str = NULL;
+    char buff[64] = {0};
+
+    sprintf(buff, "%s%f\r\n", response_ok, distance);
+    if (response) {
+        strncpy(response, buff, strlen(buff));
+    }
+
+    return 0;
+}
+
 /*!
  * @fn aibrain_strcpy()
  * @brief 拷贝字符串，从start_chr字符串里边的字符起始，直到遇见end_chr字符串里边的字符
@@ -1634,10 +1650,11 @@ static int aibrain_strcpy(char *src, char *dest, char *start_chr, char *end_chr)
 
 static const struct aibrain_atcmd_map aibrain_at_map_list[] = 
 {
-    {"AT+MINIT",    aibrain_motor_init},
-    {"AT+MPWM",     aibrain_motor_set_pwm},
-    {"AT+MDIR",     aibrain_motor_set_dir},
-    {"AT+LOG",      aibrain_log_set},
+    {"AT+MINIT" , aibrain_motor_init},
+    {"AT+MPWM"  , aibrain_motor_set_pwm},
+    {"AT+MDIR"  , aibrain_motor_set_dir},
+    {"AT+LOG"   , aibrain_log_set},
+    {"AT+DIST"  , aibrain_distance_get},
 };
 
 static void aibrain_at_response(char *response_str)
